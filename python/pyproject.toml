@@ -1,0 +1,28 @@
+# python/pyproject.toml
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paratoric"
+version = "1.0-beta"
+description = "ParaToric QMC python bindings"
+readme = "README.md"
+requires-python = ">=3.10"
+
+# --- Runtime dependencies pulled by pip ---
+dependencies = [
+  "numpy>=1.24",
+  "matplotlib>=3.6",
+  "h5py>=3.7",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["paratoric*"]
+
+[tool.setuptools.package-data]
+paratoric = ["_paratoric.pyi", "py.typed"]
