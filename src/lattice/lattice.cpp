@@ -3254,6 +3254,59 @@ bool Lattice::is_winding_plaquette_percolating() {
     return false;
 }
 
+int Lattice::largest_plaquette_cluster() {
+    const size_t P = static_cast<size_t>(get_plaquette_count());
+    if (P == 0) return 0;
+
+    thread_local std::vector<int> parent, rankv, comp_size;
+    if (parent.size() < P) {
+        parent.resize(P);
+        rankv.resize(P);
+        comp_size.resize(P);
+    }
+
+    std::iota(parent.begin(), parent.begin() + P, 0);
+    std::fill(rankv.begin(), rankv.begin() + P, 0);
+    std::fill(comp_size.begin(), comp_size.begin() + P, 1);
+
+    // Path-halving 
+    auto find = [&](int x) {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    };
+
+    auto unite = [&](int a, int b) {
+        int ra = find(a);
+        int rb = find(b);
+        if (ra == rb) return;
+        if (rankv[ra] < rankv[rb]) std::swap(ra, rb);
+        parent[rb] = ra;
+        if (rankv[ra] == rankv[rb]) ++rankv[ra];
+        comp_size[ra] += comp_size[rb];
+    };
+
+    for (auto e : egde_cache_) {
+        if (g[e].spin != -1) continue;
+        const auto& pls = g[e].part_of_plaquette_lookup; 
+        if (pls.size() >= 2) {
+            const int p0 = pls[0];
+            for (size_t i = 1; i < pls.size(); ++i) {
+                unite(p0, pls[i]);
+            }
+        }
+    }
+
+    int best = 0;
+    for (int p = 0; p < static_cast<int>(P); ++p) {
+        if (parent[p] == p) best = std::max(best, comp_size[p]);
+    }
+    return best;
+}
+
+
 int Lattice::largest_cluster() {
     const size_t N = get_vertex_count();
 
@@ -3328,7 +3381,19 @@ double Lattice::percolation_probability() {
 }
 
 double Lattice::plaquette_percolation_strength() {
-    return -1.;
+    bool percolating = 0;
+    if (BOUNDARIES == "periodic") {
+        percolating = is_winding_plaquette_percolating();
+    } else {
+        //TODO
+        percolating = 0;
+    }
+
+    if (percolating) {
+        return largest_plaquette_cluster() / static_cast<double>(get_plaquette_count());
+    } else {
+        return 0.;
+    }
 }
 
 double Lattice::plaquette_percolation_probability() {

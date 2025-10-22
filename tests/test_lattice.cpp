@@ -1231,4 +1231,29 @@ BOOST_AUTO_TEST_CASE(percolation_strength_test_1) {
     BOOST_CHECK(9/(double)lat.get_edge_count() == lat.percolation_strength());
 }
 
+BOOST_AUTO_TEST_CASE(plaquette_percolation_strength_test_1) {
+     LatSpec spec = {
+        'x', // basis
+        "square", // lattice type
+        6, // system size
+        6., // beta
+        "periodic", // boundaries
+        1 // default spin
+    };
+    auto lat = Lattice(spec);
+
+    lat.flip_spin(lat.edge_in_between(0, 6));
+    lat.flip_spin(lat.edge_in_between(1, 7));
+    lat.flip_spin(lat.edge_in_between(2, 8));
+    lat.flip_spin(lat.edge_in_between(3, 9));
+    lat.flip_spin(lat.edge_in_between(4, 10));
+    lat.flip_spin(lat.edge_in_between(5, 11));
+    lat.flip_spin(lat.edge_in_between(10, 11));
+
+    lat.flip_spin(lat.edge_in_between(13, 14));
+    lat.flip_spin(lat.edge_in_between(14, 15));
+
+    BOOST_CHECK(7/(double)lat.get_plaquette_count() == lat.plaquette_percolation_strength());
+}
+
 } // namespace paratoric

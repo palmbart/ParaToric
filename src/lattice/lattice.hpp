@@ -1051,6 +1051,14 @@ public:
     int largest_cluster();
 
     /**
+     * @brief Returns the number of plaquettes in the largest plaquette cluster connected strings (i.e. spin = -1) in the lattice.
+     * 
+     * @return number of plaquettes in the largest plaquette-cluster.
+     * 
+     */
+    int largest_plaquette_cluster();
+
+    /**
      * @brief Returns the percolation strength, i.e. the number of strings in the largest string-cluster divided by the total number of strings. If no cluster percolates it returns 0.
      * 
      * @return largest string cluster divided by number of strings if percolating, else 0.

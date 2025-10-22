@@ -26,11 +26,7 @@ class JobHandler:
         self.__set_up_logging()
 
         # Here, all the observables get the right output function and a name for the plots
-        self.obs_dict = [{'name': 'staggered_magnetization',
-                         'type': 'real',
-                         'output_str': 'Staggered magnetization',
-                         'output_func': self._real_output},
-                        {'name': 'percolation_strength',
+        self.obs_dict = [{'name': 'percolation_strength',
                          'type': 'real',
                          'output_str': 'Percolation strength',
                          'output_func': self._real_output},
@@ -58,13 +54,9 @@ class JobHandler:
                          'type': 'real',
                          'output_str': 'Largest cluster',
                          'output_func': self._real_output},
-                        {'name': 'largest_percolating_cluster',
+                        {'name': 'largest_plaquette_cluster',
                          'type': 'real',
-                         'output_str': 'Largest cluster',
-                         'output_func': self._real_output},
-                        {'name': 'percolation_correlation_length',
-                         'type': 'real',
-                         'output_str': 'Correlation length',
+                         'output_str': 'Largest plaquette cluster',
                          'output_func': self._real_output},
                         {'name': 'string_number',
                          'type': 'real',
@@ -133,10 +125,6 @@ class JobHandler:
                         {'name': 'energy_J',
                          'type': 'real',
                          'output_str': r'$\langle -J \; \sum_p \; B_p \rangle$',
-                         'output_func': self._real_output},
-                        {'name': 'shortest_path_man',
-                         'type': 'real',
-                         'output_str': 'Manhattan distance',
                          'output_func': self._real_output}]
         
     def __set_up_logging(self):

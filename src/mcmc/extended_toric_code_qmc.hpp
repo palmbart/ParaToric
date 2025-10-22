@@ -222,7 +222,7 @@ class ExtendedToricCodeQMC {
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
-        plaquette_percolation_probability 
+        plaquette_percolation_probability_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             return lat.plaquette_percolation_probability(); 
         };
@@ -240,6 +240,12 @@ class ExtendedToricCodeQMC {
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
+        plaquette_percolation_strength_obs 
+        = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
+            return lat.plaquette_percolation_strength(); 
+        };
+
+        std::function<double(Lattice&, double, double, double, double)> 
         string_number_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             return lat.get_string_count(); 
@@ -249,6 +255,12 @@ class ExtendedToricCodeQMC {
         largest_cluster_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             return lat.largest_cluster(); 
+        };
+
+        std::function<double(Lattice&, double, double, double, double)> 
+        largest_plaquette_cluster_obs 
+        = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
+            return lat.largest_plaquette_cluster(); 
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
@@ -419,9 +431,11 @@ class ExtendedToricCodeQMC {
             {"energy_mu", "real", energy_mu_obs},
             {"fredenhagen_marcu", "fredenhagen_marcu", fredenhagen_marcu_obs},
             {"largest_cluster", "real", largest_cluster_obs},
+            {"largest_plaquette_cluster", "real", largest_plaquette_cluster_obs},
             {"percolation_probability", "real", percolation_probability_obs},
             {"percolation_strength", "real", percolation_strength_obs},
-            {"plaquette_percolation_probability", "real", plaquette_percolation_probability},
+            {"plaquette_percolation_probability", "real", plaquette_percolation_probability_obs},
+            {"plaquette_percolation_strength", "real", plaquette_percolation_strength_obs},
             {"plaquette_z", "real", plaquette_z_obs},
             {"sigma_x", "real", sigma_x_obs},
             {"sigma_x_susceptibility", "susceptibility", sigma_x_susceptibility_obs},
