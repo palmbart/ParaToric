@@ -99,7 +99,7 @@ This simulation type runs `T_steps` individual Markov chains for evenly spaced t
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_T_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -Tl 0.5 -Tu 5 -Ts 30 -hc 0.1 -Jc 1 -lmbdac 0.1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability largest_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_T_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -Tl 0.5 -Tu 5 -Ts 30 -hc 0.1 -Jc 1 -lmbdac 0.1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -118,7 +118,7 @@ This simulation type runs `h_steps` individual Markov chains for evenly spaced f
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_h_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -hl 0.1 -hu 0.5 -hs 8 -T 0.03 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability largest_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_h_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -hl 0.1 -hu 0.5 -hs 8 -T 0.03 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -137,7 +137,7 @@ This simulation type runs `lmbda_steps` individual Markov chains for evenly spac
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -lmbdal 0.01 -lmbdau 1.0 -lmbdas 15 -T 0.1 -hc 0.3  -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability largest_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -lmbdal 0.01 -lmbdau 1.0 -lmbdas 15 -T 0.1 -hc 0.3  -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -156,7 +156,7 @@ This simulation type runs `Theta_steps` individual Markov chains on a circle in 
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -lmbdac 0.4 -rad 0.3 -Thl 0 -Thu 3.141 -Ths 15 -T 0.1 -hc 0.4 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability largest_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -lmbdac 0.4 -rad 0.3 -Thl 0 -Thu 3.141 -Ths 15 -T 0.1 -hc 0.4 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -178,7 +178,7 @@ This simulation type performs the thermalization for `repetitions` individual Ma
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 2000 -reps 10 -lmbdac 2 -T 0.1 -hc 0.3 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability largest_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 2000 -reps 10 -lmbdac 2 -T 0.1 -hc 0.3 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
