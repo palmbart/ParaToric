@@ -341,7 +341,7 @@ class ExtendedToricCodeQMC {
         sigma_x_dynamical_susceptibility_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             if constexpr (Basis == 'x') return lat.get_diag_dynamical_M_M();
-            else return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2 * h * h ));
+            else return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2) * h);
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
@@ -364,7 +364,7 @@ class ExtendedToricCodeQMC {
         sigma_z_dynamical_susceptibility_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             if constexpr (Basis == 'x') 
-                return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2 * lmbda * lmbda ));
+                return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2) * lmbda);
             else 
                 return lat.get_diag_dynamical_M_M();
         };
