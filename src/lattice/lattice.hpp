@@ -1422,17 +1422,17 @@ inline double Lattice::integrated_edge_energy_diff_combination(
     double t_prev = imag_time_1;
     double energy_before = 0.0, energy_after = 0.0;
 
-    constexpr double INF = std::numeric_limits<double>::infinity();
+    constexpr double no_imaginary_time_found = -1.0;
 
     auto next_edge_time = [&]() -> double {
         return (it_edge != spin_flips.end() && *it_edge < imag_time_2)
              ? *it_edge
-             : INF;
+             : no_imaginary_time_found;
     };
     auto next_delta_time = [&]() -> double {
         return (i_delta < N_delta && spin_flip_lookup[i_delta].first < imag_time_2)
              ? spin_flip_lookup[i_delta].first
-             : INF;
+             : no_imaginary_time_found;
     };
 
     while (true) {
@@ -1440,7 +1440,7 @@ inline double Lattice::integrated_edge_energy_diff_combination(
         double t_delta = next_delta_time();
         double t_curr  = std::min(t_edge, t_delta);
 
-        if (t_curr == INF) {
+        if (t_curr == no_imaginary_time_found) {
             break;
         }
 
