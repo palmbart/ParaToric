@@ -2560,16 +2560,20 @@ Lattice::integrated_star_energy_diff_combination(
     );
 
     double energy = 0.;
+    std::vector<std::pair<double,int>> local_spin_flips;
     for (const auto& v : unique_vertices) {
         const auto& star_edges = get_star_edges(v);
-        std::vector<std::pair<double, int>> local_spin_flips {{imag_time_tuple_flip, 1}};
-        for (size_t i = 0; i < star_edges.size(); ++i) {
-            auto it = std::find(plaquette_edges.begin(), plaquette_edges.end(), star_edges[i]);
+        local_spin_flips.clear();
+        insert_sorted_by_time(local_spin_flips, imag_time_tuple_flip, 1);
+
+        // Add singles that lie on edges shared with the plaquette
+        for (const auto& e : star_edges) {
+            auto it = std::find(plaquette_edges.begin(), plaquette_edges.end(), e);
             if (it != plaquette_edges.end()) {
-                local_spin_flips.emplace_back(spin_flip_lookup[std::distance(plaquette_edges.begin(), it)], 0);
+                const size_t idx = static_cast<size_t>(std::distance(plaquette_edges.begin(), it));
+                insert_sorted_by_time(local_spin_flips, spin_flip_lookup[idx], 0);
             }
         }
-        std::sort(local_spin_flips.begin(), local_spin_flips.end());
         double energy_v = integrated_tuple_energy_diff_combination(
             star_edges, imag_time_1, imag_time_2, local_spin_flips
         );
