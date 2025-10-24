@@ -326,8 +326,10 @@ class ExtendedToricCodeQMC {
         std::function<double(Lattice&, double, double, double, double)> 
         sigma_x_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
-            if constexpr (Basis == 'x') return lat.get_diag_single_energy()/static_cast<double>(lat.get_edge_count()); 
-            else return lat.get_non_diag_single_energy_z()/static_cast<double>(lat.get_edge_count() * h);
+            if constexpr (Basis == 'x') 
+                return lat.get_diag_single_energy()/static_cast<double>(lat.get_edge_count()); 
+            else 
+                return lat.get_non_diag_single_energy_z()/static_cast<double>(lat.get_edge_count() * h);
         };
 
         std::function<std::complex<double>(Lattice&, double, double, double, double)> 
@@ -392,8 +394,7 @@ class ExtendedToricCodeQMC {
             if constexpr (Basis == 'x') {
                 return - lat.get_diag_tuple_energy_x()/static_cast<double>(lat.get_vertex_count()) 
                 + lat.get_non_diag_tuple_energy_x()/static_cast<double>(lat.get_plaquette_count() * J); 
-            }
-            else {
+            } else {
                 return - lat.get_non_diag_tuple_energy_z()/static_cast<double>(lat.get_vertex_count() * mu) 
                 + lat.get_diag_tuple_energy_z()/static_cast<double>(lat.get_plaquette_count());
             }
@@ -1848,7 +1849,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_tuple_flip(
 #ifndef NDEBUG
     if constexpr (Basis == 'x') {
         const auto tuple_vertex_pairs = lat.get_plaquette_vertex_pairs(random_tuple);
-        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_tuple_flip --- Randomly chose plaquette with edges {}", tuple_vertex_pairs);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_tuple_flip --- Randomly chose plaquette with index {} and edges {}", random_tuple, tuple_vertex_pairs);
     } else if constexpr (Basis == 'z') {
         BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_tuple_flip --- Randomly chose star with center {}", random_tuple);
     }
@@ -1918,7 +1919,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
 #ifndef NDEBUG
     if constexpr (Basis == 'x') {
         const auto tuple_vertex_pairs = lat.get_plaquette_vertex_pairs(random_tuple);
-        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_tuple_flip --- Randomly chose plaquette with edges {}", tuple_vertex_pairs);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_tuple_flip --- Randomly chose plaquette with index {} and edges {}", random_tuple, tuple_vertex_pairs);
     } else if constexpr (Basis == 'z') {
         BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_tuple_flip --- Randomly chose star with center ", random_tuple);
     }
@@ -2120,7 +2121,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
     if constexpr (Basis == 'x') {
         const auto tuple_vertex_pairs = lat.get_plaquette_vertex_pairs(random_tuple);
-        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- Randomly chose plaquette with edges {}", tuple_vertex_pairs);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- Randomly chose plaquette with index {} and edges {}", random_tuple, tuple_vertex_pairs);
     } else if constexpr (Basis == 'z') {
         BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- Randomly chose star with center {}", random_tuple);
     }
@@ -2467,7 +2468,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #ifndef NDEBUG
     if constexpr (Basis == 'x') {
         const auto tuple_vertex_pairs = lat.get_plaquette_vertex_pairs(random_tuple);
-        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- Randomly chose plaquette with edges {}", tuple_vertex_pairs);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- Randomly chose plaquette with index {} and edges {}", random_tuple, tuple_vertex_pairs);
     } else if constexpr (Basis == 'z') {
         BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- Randomly chose star with center {}", random_tuple);
     }
@@ -2609,8 +2610,9 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
         int single_spin_flip_count = single_spin_flips.size();
 
 #ifndef NDEBUG
+        int spin = lat.get_spin(edg);
         const auto& [source_v, target_v] = lat.vertices_of_edge(edg);
-        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- edge between vertices {} and {} - Found {} single spin flips.", source_v, target_v, single_spin_flip_count);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- edge between vertices {} and {} - Spin: {}. Found {} single spin flips.", source_v, target_v, spin, single_spin_flip_count);
 #endif  
 
         if (rnd_create_destroy < 0.5) { // destroy
@@ -2799,6 +2801,12 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
     );
     const double integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
+#ifndef NDEBUG
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- integrated_pot_energy_diff_edge: {}", integrated_pot_energy_diff_edge);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- integrated_pot_energy_diff_tuple: {}", integrated_pot_energy_diff_tuple);
+        BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- integrated_pot_energy_diff: {}", integrated_pot_energy_diff);
+#endif 
+
     acc_ratio = std::exp(- integrated_pot_energy_diff) * r * std::accumulate(r_b.begin(), r_b.end(), 1., std::multiplies<double>());
 
 #ifndef NDEBUG
@@ -2812,7 +2820,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
         combination_flip(lat, h, mu, random_tuple, tuple_edges, tau_new, flip_times, create_vector, tuple_destroy); 
         integrated_pot_energy += integrated_pot_energy_diff;
         for (size_t i = 0; i < tuple_edges.size(); ++i) {
-            lat.add_potential_edge_energy(tuple_edges[i], pot_energy_edges_diffs[i]);
+            lat.add_potential_edge_energy(pot_energy_edges[i], pot_energy_edges_diffs[i]);
         }
         for (size_t i = 0; i < pot_energy_tuple_indices.size(); ++i) {
             int tuple_index = pot_energy_tuple_indices[i];
@@ -2849,6 +2857,14 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step(
     } else {
         metropolis_step_spin_tuple_combination(lat, integrated_pot_energy, acc_ratio, beta, h, mu, J, lmbda);
     }  
+
+#ifndef NDEBUG
+    double integrated_pot_energy_check = total_integrated_pot_energy(
+        lat, h, mu, J, lmbda
+    );
+
+    BOOST_LOG_TRIVIAL(debug) << std::format("Integrated potential energy --- Cached: {}, Actual: {}", integrated_pot_energy, integrated_pot_energy_check);
+#endif  
 }
 
 template<char Basis>
@@ -2901,7 +2917,7 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
     double acc_ratio = 1.;
 
     int total_metropolis_step_count = 0;
-    int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*100000);
+    int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*10000);
 
     for (int i = 0; i < config.sim_spec.N_thermalization; ++i) {
         ++total_metropolis_step_count;

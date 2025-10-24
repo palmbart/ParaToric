@@ -14,12 +14,12 @@
 
 namespace paratoric {
 
-double h = 1;  
+double h = 1.;  
 std::vector<double> h_hys {0.9, 1., 1.1};
-double lmbda = 1; 
+double lmbda = 1.; 
 std::vector<double> lmbda_hys {0.9, 1., 1.1};
-double mu = 1; 
-double J = 1; 
+double mu = 1.; 
+double J = 1.; 
 
 BOOST_AUTO_TEST_CASE(get_sample_test_1) {
     auto mc = ExtendedToricCodeQMC<'x'>();

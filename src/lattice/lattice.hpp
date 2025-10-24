@@ -1438,10 +1438,16 @@ inline double Lattice::integrated_edge_energy_diff_combination(
     while (true) {
         double t_edge  = next_edge_time();
         double t_delta = next_delta_time();
-        double t_curr  = std::min(t_edge, t_delta);
+        double t_curr;
 
-        if (t_curr == no_imaginary_time_found) {
+        if (t_edge < 0 && t_delta < 0) {
             break;
+        } else if (t_edge < 0) {
+            t_curr = t_delta;
+        } else if (t_delta < 0) {
+            t_curr = t_edge;
+        } else {
+            t_curr = std::min(t_edge, t_delta);
         }
 
         double dt = t_curr - t_prev;
@@ -1450,7 +1456,8 @@ inline double Lattice::integrated_edge_energy_diff_combination(
         t_prev = t_curr;
 
         // edge flip toggles both histories
-        if (t_edge <= t_delta) {
+        const bool edge_event = (t_edge >= 0) && (t_delta < 0 || t_edge <= t_delta);
+        if (edge_event) {
             spin_prev  = -spin_prev;
             spin_after = -spin_after;
             ++it_edge;

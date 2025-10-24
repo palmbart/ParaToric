@@ -806,6 +806,37 @@ BOOST_AUTO_TEST_CASE(integrated_edge_energy_test_1) {
     BOOST_CHECK_CLOSE(-0.05, lat.integrated_edge_energy(lat.edge_in_between(0,1), 1.5, 2.95), 0.001);
 }
 
+BOOST_AUTO_TEST_CASE(integrated_edge_energy_diff_combination_test_1) {
+     LatSpec spec = {
+        'x', // basis
+        "triangular", // lattice type
+        6, // system size
+        10., // beta
+        "periodic", // boundaries
+        1 // default spin
+    };
+    auto lat = Lattice(spec);
+
+    auto pot_edge_energy_before = - lat.total_integrated_edge_energy();
+    auto pot_star_energy_before = - lat.total_integrated_star_energy();
+
+    std::println("pot_edge_energy_before: {}, pot_star_energy_before: {}", pot_edge_energy_before, pot_star_energy_before);
+
+    auto pedges = lat.get_plaquette_edges(0);
+    lat.insert_single_spin_flip(pedges[0], 5.81);
+    lat.insert_single_spin_flip(pedges[1], 5.75);
+    lat.insert_single_spin_flip(pedges[2], 7.33);
+    lat.insert_tuple_flip(0, lat.get_plaquette_edges(0), 6.23);
+
+    auto pot_edge_energy_after = - lat.total_integrated_edge_energy();
+    auto pot_star_energy_after = - lat.total_integrated_star_energy();
+
+    std::println("pot_edge_energy_after: {}, pot_star_energy_after: {}", pot_edge_energy_after, pot_star_energy_after);
+
+    BOOST_CHECK_CLOSE(4, pot_edge_energy_after-pot_edge_energy_before, 0.001);
+    BOOST_CHECK_CLOSE(6.32, pot_star_energy_after-pot_star_energy_before, 0.001);
+}
+
 BOOST_AUTO_TEST_CASE(is_percolating_test_1) {
      LatSpec spec = {
         'x', // basis
