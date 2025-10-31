@@ -2931,6 +2931,10 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
             // avoid accumulation of small numerical errors leading to bias
             lat.init_potential_energy();
             lat.rotate_imag_time();
+            integrated_pot_energy = total_integrated_pot_energy(
+                lat, config.param_spec.h, config.param_spec.mu, 
+                config.param_spec.J, config.param_spec.lmbda
+            );
         }
 
         for (size_t k = 0; k < config.sim_spec.observables.size(); k++) {
@@ -3029,10 +3033,16 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         if (std::abs(config.param_spec.h - config.param_spec.h_therm) > PRECISION) {
             for (int i = 9; i > -1; --i) {
                 h_end = config.param_spec.h + (config.param_spec.h_therm-config.param_spec.h) * i / 10.;
+                lat.init_potential_energy();
+                lat.rotate_imag_time();
+                integrated_pot_energy = total_integrated_pot_energy(
+                    lat, h_end, config.param_spec.mu, 
+                    config.param_spec.J, config.param_spec.lmbda_therm
+                );
                 for (int j = 0; j < config.sim_spec.N_thermalization / 10.; ++j) {
                     metropolis_step(
                         lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, h_end, 
-                        config.param_spec.mu, config.param_spec.J, config.param_spec.lmbda
+                        config.param_spec.mu, config.param_spec.J, config.param_spec.lmbda_therm
                     );
                 }
             }
@@ -3041,6 +3051,12 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         if (std::abs(config.param_spec.lmbda - config.param_spec.lmbda_therm) > PRECISION) {
             for (int i = 9; i > -1; --i) {
                 lmbda_end = config.param_spec.lmbda + (config.param_spec.lmbda_therm-config.param_spec.lmbda) * i / 10.;
+                lat.init_potential_energy();
+                lat.rotate_imag_time();
+                integrated_pot_energy = total_integrated_pot_energy(
+                    lat, h_end, config.param_spec.mu, 
+                    config.param_spec.J, lmbda_end
+                );
                 for (int j = 0; j < config.sim_spec.N_thermalization / 10.; ++j) {
                     metropolis_step(
                         lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, h_end, 
@@ -3082,6 +3098,10 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();
                 lat.rotate_imag_time();
+                integrated_pot_energy = total_integrated_pot_energy(
+                    lat, config.param_spec.h, config.param_spec.mu, 
+                    config.param_spec.J, config.param_spec.lmbda
+                );
             }
         }
 
@@ -3209,6 +3229,14 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         }
     }
 
+    integrated_pot_energy_check = total_integrated_pot_energy(
+        lat, config.param_spec.h, config.param_spec.mu, config.param_spec.J, config.param_spec.lmbda
+    );
+
+    if (!almost_equal(integrated_pot_energy, integrated_pot_energy_check, 1e-5, 1e-13)) {
+        throw std::runtime_error(std::format("Integrated potential energy mismatch. {} does not match {}.", integrated_pot_energy, integrated_pot_energy_check));
+    }
+
     return Result{
         .series=observable_vector, 
         .mean=observable_mean_vector, 
@@ -3319,6 +3347,13 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
         h = config.param_spec.h_hys[ n ];
         lmbda = config.param_spec.lmbda_hys[ n ];
 
+        lat.init_potential_energy();
+        lat.rotate_imag_time();
+        integrated_pot_energy = total_integrated_pot_energy(
+            lat, h, config.param_spec.mu, 
+            config.param_spec.J, lmbda
+        );
+
         if constexpr (Basis == 'x') {
             if (config.param_spec.J < 0) {
                 throw std::invalid_argument("J must be non-negative in the x-basis.");
@@ -3345,6 +3380,10 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();
                 lat.rotate_imag_time();
+                integrated_pot_energy = total_integrated_pot_energy(
+                    lat, h, config.param_spec.mu, 
+                    config.param_spec.J, lmbda
+                );
             }
         }
 
@@ -3359,6 +3398,10 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     // avoid accumulation of small numerical errors leading to bias
                     lat.init_potential_energy();
                     lat.rotate_imag_time();
+                    integrated_pot_energy = total_integrated_pot_energy(
+                        lat, h, config.param_spec.mu, 
+                        config.param_spec.J, lmbda
+                    );
                 }
             }
 
@@ -3490,6 +3533,14 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
         hys_binder.emplace_back(binder_mean_vector);
         hys_binder_std.emplace_back(binder_std_vector);
         hys_autocorrelation_time.emplace_back(observable_autocorrelation_time_vector);
+
+        integrated_pot_energy_check = total_integrated_pot_energy(
+            lat, h, config.param_spec.mu, config.param_spec.J, lmbda
+        );
+
+        if (!almost_equal(integrated_pot_energy, integrated_pot_energy_check, 1e-5, 1e-13)) {
+            throw std::runtime_error(std::format("Integrated potential energy mismatch. {} does not match {}.", integrated_pot_energy, integrated_pot_energy_check));
+        }
     }
 
     return Result{

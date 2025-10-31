@@ -15,8 +15,10 @@
 namespace paratoric {
 
 double h = 1.;  
+double h_therm = 0.9;
 std::vector<double> h_hys {0.9, 1., 1.1};
 double lmbda = 1.; 
+double lmbda_therm = 1.1;
 std::vector<double> lmbda_hys {0.9, 1., 1.1};
 double mu = 1.; 
 double J = 1.; 
@@ -36,8 +38,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_1) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
@@ -79,15 +81,15 @@ BOOST_AUTO_TEST_CASE(get_sample_test_2) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
         .N_thermalization = 50,
         .N_between_samples = 50,
         .N_resamples = 100,
-        .custom_therm = false,
+        .custom_therm = true,
         .seed = 0,
         .observables = std::vector<std::string>{
             "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
@@ -122,8 +124,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_3) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
@@ -165,8 +167,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_4) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
@@ -208,8 +210,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_5) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
@@ -252,8 +254,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_6) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
@@ -295,8 +297,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_7) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
@@ -338,8 +340,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_8) {
         .h = h,
         .J = J,
         .lmbda = lmbda,
-        .h_therm = h,          // only if you need it
-        .lmbda_therm = lmbda   // only if you need it
+        .h_therm = h_therm,          // only if you need it
+        .lmbda_therm = lmbda_therm   // only if you need it
     };
     SimSpec sim_spec = {
         .N_samples = 50,
