@@ -820,8 +820,6 @@ BOOST_AUTO_TEST_CASE(integrated_edge_energy_diff_combination_test_1) {
     auto pot_edge_energy_before = - lat.total_integrated_edge_energy();
     auto pot_star_energy_before = - lat.total_integrated_star_energy();
 
-    std::println("pot_edge_energy_before: {}, pot_star_energy_before: {}", pot_edge_energy_before, pot_star_energy_before);
-
     auto pedges = lat.get_plaquette_edges(0);
     lat.insert_single_spin_flip(pedges[0], 5.81);
     lat.insert_single_spin_flip(pedges[1], 5.75);
@@ -830,8 +828,6 @@ BOOST_AUTO_TEST_CASE(integrated_edge_energy_diff_combination_test_1) {
 
     auto pot_edge_energy_after = - lat.total_integrated_edge_energy();
     auto pot_star_energy_after = - lat.total_integrated_star_energy();
-
-    std::println("pot_edge_energy_after: {}, pot_star_energy_after: {}", pot_edge_energy_after, pot_star_energy_after);
 
     BOOST_CHECK_CLOSE(4, pot_edge_energy_after-pot_edge_energy_before, 0.001);
     BOOST_CHECK_CLOSE(6.32, pot_star_energy_after-pot_star_energy_before, 0.001);
