@@ -65,11 +65,12 @@ BOOST_AUTO_TEST_CASE(get_thermalization_test_1) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -103,11 +104,12 @@ BOOST_AUTO_TEST_CASE(get_thermalization_test_2) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -141,11 +143,12 @@ BOOST_AUTO_TEST_CASE(get_thermalization_test_3) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -184,11 +187,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_1) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -227,11 +231,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_2) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -270,11 +275,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_3) {
         .custom_therm = true,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -313,11 +319,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_4) {
         .custom_therm = true,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -356,11 +363,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_5) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -399,11 +407,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_6) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -442,11 +451,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_7) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -485,11 +495,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_8) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -528,11 +539,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_9) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "sigma_x_susceptibility",
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     }; 
     OutSpec out_spec = {
@@ -572,11 +584,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_10) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "sigma_x_susceptibility",
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     }; 
     OutSpec out_spec = {
@@ -616,11 +629,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_11) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -659,11 +673,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_12) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -702,11 +717,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_13) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -745,11 +761,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_14) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -788,11 +805,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_15) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -831,11 +849,12 @@ BOOST_AUTO_TEST_CASE(get_sample_test_16) {
         .custom_therm = false,
         .seed = 0,
         .observables = std::vector<std::string>{
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility"
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -871,11 +890,12 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_1) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility" 
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -911,11 +931,12 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_2) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility" 
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -951,11 +972,12 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_3) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility" 
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -991,11 +1013,12 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_4) {
         .N_resamples = 100,
         .seed = 0,
         .observables = std::vector<std::string> { 
-            "percolation_strength", "percolation_probability", "plaquette_percolation_probability", 
-            "largest_cluster", "string_number", "energy", "energy_h", "energy_mu", "energy_J", 
-            "energy_lmbda", "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
-            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", "sigma_x_susceptibility", 
-            "sigma_z_susceptibility" 
+            "percolation_strength", "percolation_probability", "plaquette_percolation_strength",
+            "plaquette_percolation_probability", "largest_cluster", "largest_plaquette_cluster", 
+            "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
+            "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
+            "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
+            "sigma_x_susceptibility", "sigma_z_susceptibility"
         }
     };
     OutSpec out_spec = {
