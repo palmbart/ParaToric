@@ -23,6 +23,7 @@ Contents
   - [h-sweep](#h-sweep)
   - [$`\lambda`$-sweep](#lambda-sweep)
   - [$`\circ`$-sweep](#circ-sweep)
+  - [Hysteresis-sweep](#his-sweep)
   - [Thermalization](#thermalization)
 
 Dependencies
