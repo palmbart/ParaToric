@@ -99,7 +99,7 @@ This simulation type runs `T_steps` individual Markov chains for evenly spaced t
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_T_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -Tl 0.5 -Tu 5 -Ts 30 -hc 0.1 -Jc 1 -lmbdac 0.1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_T_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -Tl 0.1 -Tu 10 -Ts 15 -hc 0.5 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -118,7 +118,7 @@ This simulation type runs `h_steps` individual Markov chains for evenly spaced f
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_h_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -hl 0.1 -hu 0.5 -hs 8 -T 0.03 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_h_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -hl 0.0 -hu 0.5 -hs 15 -T 0.1 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability plaquette_percolation_strength largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory
 ```
 
 **Specific Python Command line options**
@@ -137,7 +137,7 @@ This simulation type runs `lmbda_steps` individual Markov chains for evenly spac
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -lmbdal 0.01 -lmbdau 1.0 -lmbdas 15 -T 0.1 -hc 0.3  -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Nbs 12000 -Ns 1000 -muc 1 -Nth 100000 -lmbdal 0.1 -lmbdau 0.7 -lmbdas 15 -T 0.1 -hc 0.1 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability plaquette_percolation_strength largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas z -lat honeycomb -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -156,7 +156,7 @@ This simulation type runs `Theta_steps` individual Markov chains on a circle in 
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Ns 1000 -muc 1 -Nth 2000 -Nbs 100 -lmbdac 0.4 -rad 0.3 -Thl 0 -Thu 3.141 -Ths 15 -T 0.1 -hc 0.4 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -lmbdac 0.0 -rad 1.0 -Thl 0 -Thu 1.57 -Ths 30 -T 0.1 -hc 0.0 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -172,13 +172,31 @@ $ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Ns 1000 -muc 1 -Nth 2
 | `--Theta_upper`     | `-Thu`     | Upper bound of angle $`\Theta`$                                     |
 | `--Theta_steps`     | `-Ths`     | Number of angle steps between lower and upper bound                 |
 
+### Hysteresis-sweep
+
+Uses the hysteresis schedule specified in `h_hysteresis` and `lmbda_hysteresis`; this is particularly useful in the context of hysteresis near first-order phase transitions. The Markov chains for different parameters are not run in parallel, instead the last state of the previous parameter point will be used as the starting point for the thermalization of the next parameter. This mode will run two Markov chains, one in the original parameter order specified in `h_hysteresis` and `lmbda_hysteresis`, and one with a reversed parameter order, i.e., it calculates both branches of the hysteresis loop. It calculates and plots `observables` for both the original and the reversed parameter order. We advise setting `processes` = 2.
+
+An exemplary simulation could look like this:
+```bash
+$ python3 ./python/cli/paratoric.py -sim etc_hysteresis -Nbs 5000 -Ns 1000 -muc 1 -Nth 50000 -hhys 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 -T 0.1 -Jc 1 -lmbdahys 0 0 0 0 0 0 0 0 0 0 0 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat cubic -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+```
+
+**Specific Python Command line options**
+
+| Long flag           | Short      | Description                                                         |
+|:--------------------|:----------:|:--------------------------------------------------------------------|
+| `--help`            |  `-h`      | Display help message (lists command line arguments)                 |
+| `--simulation`      | `-sim`     | Simulation type (here `etc_hysteresis`)                             |
+| `--lmbda_hysteresis`| `-lmbdahys`| Hysteresis schedule for $`\lambda`$                                 |
+| `--h_hysteresis`    | `-hhys`    | Hysteresis schedule for $`h`$                                       |
+
 ### Thermalization
 
 This simulation type performs the thermalization for `repetitions` individual Markov chains. It calculates and plots `observables` as well as the Monte Carlo acceptance ratio after every Monte Carlo step, averaged over `repetitions`. As this task is trivial to parallelize, we advise matching `processes` = `repetitions` as closely as possible for optimal runtime.
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 2000 -reps 10 -lmbdac 2 -T 0.1 -hc 0.3 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -s 0 -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 50000 -reps 10 -lmbdac 2 -T 0.1 -hc 0.3 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
