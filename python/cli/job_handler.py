@@ -435,6 +435,7 @@ class JobHandler:
                      obs_array_error, 
                      obs_binder, 
                      obs_binder_error, 
+                     obs_tau_int,
                      temperature: float, 
                      h: float, 
                      mu: float, 
@@ -444,6 +445,42 @@ class JobHandler:
                      comment: str = ''):
 
         output_str = self.__get_observable_output_str(obs)
+
+        fig, ax = plt.subplots()
+        ax.xaxis.set_tick_params(direction='in', which='both')
+        ax.yaxis.set_tick_params(direction='in', which='both')
+        if simulation == 'etc_T_sweep':
+            ax.set(title=f"$\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
+            ax.set(xlabel=f"$T$")
+            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+        elif simulation == 'etc_h_hysteresis':
+            ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
+            ax.set(xlabel=f"$h$")
+            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+        elif simulation == 'etc_lmbda_hysteresis':
+            ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
+            ax.set(xlabel=f"$\\lambda$")
+            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+        elif simulation == 'etc_h_sweep':
+            ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $\\lambda = {lmbda}$")
+            ax.set(xlabel=f"$h$")
+            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+        elif simulation == 'etc_lmbda_sweep':
+            ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$")
+            ax.set(xlabel=f"$\\lambda$")
+            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+        elif simulation == 'etc_circle_sweep':
+            ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$, $r = {radius}$")
+            ax.set(xlabel=f"$\\theta / \\pi$")
+            ax.plot(variable/np.pi, obs_tau_int, 'o-', color='goldenrod')
+        else:
+            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+       
+        ax.grid(color='silver', linestyle='-', alpha=0.3)
+        ax.set(ylabel=output_str + ' int. autocorr. time')
+        fig.tight_layout()
+        fig.savefig(os.path.join(path, f"{simulation}_{obs}_{comment}_int_ac_time.pdf"))
+        plt.close(fig)
 
         fig, ax = plt.subplots()
         ax.xaxis.set_tick_params(direction='in', which='both')
@@ -520,6 +557,7 @@ class JobHandler:
         hdf5_dict[obs + f"_{comment}" + '_binder'] = obs_binder.astype(np.float64)
         hdf5_dict[obs + f"_{comment}" + '_error'] = obs_array_error.astype(np.float64)
         hdf5_dict[obs + f"_{comment}" + '_binder_error'] = obs_binder_error.astype(np.float64)
+        hdf5_dict[obs + f"_{comment}" + '_int_ac_time'] = obs_tau_int.astype(np.float64)
 
     def etc_T_sweep(self,
                        N_samples: int,
@@ -605,7 +643,7 @@ class JobHandler:
             try:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_T_sweep', hdf5_dict, temperatures,
-                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], 0, h, mu, J, lmbda, 0)
+                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], 0, h, mu, J, lmbda, 0)
             except Exception as e:
                 self.log.info(traceback.format_exc())
             
@@ -695,15 +733,15 @@ class JobHandler:
                 if all_equal(h_hys):
                     obs_func = self.__get_observable_output_func(obs)
                     obs_func(obs, output_dir, 'etc_lmbda_hysteresis', hdf5_dict, lmbda_hys,
-                            results_forward[0, :, i], results_forward[1, :, i], results_forward[2, :, i], results_forward[3, :, i], temperature, h_hys[0], mu, J, 0, 0, 'forward')
+                            results_forward[0, :, i], results_forward[1, :, i], results_forward[2, :, i], results_forward[3, :, i], results_forward[4, :, i], temperature, h_hys[0], mu, J, 0, 0, 'forward')
                     obs_func(obs, output_dir, 'etc_lmbda_hysteresis', hdf5_dict, lmbda_hys[::-1],
-                            results_backward[0, :, i], results_backward[1, :, i], results_backward[2, :, i], results_backward[3, :, i], temperature, h_hys[0], mu, J, 0, 0, 'backward')
+                            results_backward[0, :, i], results_backward[1, :, i], results_backward[2, :, i], results_backward[3, :, i], results_backward[4, :, i], temperature, h_hys[0], mu, J, 0, 0, 'backward')
                 else:
                     obs_func = self.__get_observable_output_func(obs)
                     obs_func(obs, output_dir, 'etc_h_hysteresis', hdf5_dict, h_hys,
-                            results_forward[0, :, i], results_forward[1, :, i], results_forward[2, :, i], results_forward[3, :, i], temperature, 0, mu, J, lmbda_hys[0], 0, 'forward')
+                            results_forward[0, :, i], results_forward[1, :, i], results_forward[2, :, i], results_forward[3, :, i], results_forward[4, :, i], temperature, 0, mu, J, lmbda_hys[0], 0, 'forward')
                     obs_func(obs, output_dir, 'etc_h_hysteresis', hdf5_dict, h_hys[::-1],
-                            results_backward[0, :, i], results_backward[1, :, i], results_backward[2, :, i], results_backward[3, :, i], temperature, 0, mu, J, lmbda_hys[0], 0, 'backward')
+                            results_backward[0, :, i], results_backward[1, :, i], results_backward[2, :, i], results_backward[3, :, i], results_backward[4, :, i], temperature, 0, mu, J, lmbda_hys[0], 0, 'backward')
             except Exception as e:
                 self.log.info(traceback.format_exc())
             
@@ -794,7 +832,7 @@ class JobHandler:
             try:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_h_sweep', hdf5_dict, hs,
-                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], temperature, 0, mu, J, lmbda, 0)
+                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], temperature, 0, mu, J, lmbda, 0)
             except Exception as e:
                 self.log.info(traceback.format_exc())
             
@@ -885,7 +923,7 @@ class JobHandler:
             try:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_lmbda_sweep', hdf5_dict, lmbdas,
-                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], temperature, h, mu, J, 0, 0)
+                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], temperature, h, mu, J, 0, 0)
             except Exception as e:
                 self.log.info(traceback.format_exc())
             
@@ -976,7 +1014,7 @@ class JobHandler:
             try:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_circle_sweep', hdf5_dict, angles_array,
-                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], temperature, h, mu, J, lmbda, radius)
+                        results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], temperature, h, mu, J, lmbda, radius)
             except Exception as e:
                 self.log.info(traceback.format_exc())
             
