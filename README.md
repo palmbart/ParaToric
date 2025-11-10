@@ -25,6 +25,7 @@ Contents
   - [$`\circ`$-sweep](#circ-sweep)
   - [Hysteresis-sweep](#hysteresis-sweep)
   - [Thermalization](#thermalization)
+* [Acknowledgements](#acknowledgements)
 
 Dependencies
 ------------
@@ -207,6 +208,11 @@ $ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 50000 -r
 | `--help`            |  `-h`      | Display help message (lists command line arguments)                 |
 | `--simulation`      | `-sim`     | Simulation type (here `etc_thermalization`)                         |
 | `--repetitions`     | `-reps`    | Number of Markov chains to average over                             |
+
+Acknowledgements
+----------------
+
+This research was funded by the European Research Council (ERC) under the European Union’s Horizon 2020 research and innovation program -- ERC Starting Grant SimUcQuam (Grant Agreement No. 948141), and by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany's Excellence Strategy -- EXC-2111 -- project number 390814868. The project/research is part of the Munich Quantum Valley, which is supported by the Bavarian state government with funds from the Hightech Agenda Bayern Plus.
 
 [1]: https://doi.org/10.1103/PhysRevB.85.195104
 [2]: https://slurm.schedmd.com/
