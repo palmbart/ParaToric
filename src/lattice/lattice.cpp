@@ -2653,7 +2653,8 @@ double Lattice::total_integrated_edge_energy() {
 double Lattice::total_integrated_edge_energy_weighted() {
     double total_integrated_edge_energy = 0.;
     for (const auto& edg : egde_cache_) {
-        total_integrated_edge_energy += integrated_edge_energy_weighted(edg, 0, BETA);
+        // only integrate up to beta/2 for dynamical susceptibility
+        total_integrated_edge_energy += integrated_edge_energy_weighted(edg, 0, 0.5 * BETA);
     }
     return total_integrated_edge_energy;
 }
@@ -2718,28 +2719,21 @@ std::complex<double> Lattice::get_non_diag_M_M() {
     return {k_total, k_total};
 }
 
-// Antiderivative of w(tau) = min(tau, beta-tau), continuous on [0,beta]
-[[gnu::always_inline]] inline double W_tri(double t, double beta) {
-    // assumes 0 <= t <= beta
-    const double half = 0.5 * beta;
-    if (t <= half) {
-        return 0.5 * t * t;                    // \int tau dtau
-    } else {
-        // \int (beta - tau) dtau, matched continuously at beta/2
-        return beta * t - 0.5 * t * t - 0.25 * beta * beta;
-    }
+// Antiderivative of w(tau) = tau (i.e. min(tau, beta - tau) on [0, beta/2])
+[[gnu::always_inline]] inline double W_tri_half(double t) {
+    // assumes 0 <= t <= beta/2
+    return 0.5 * t * t;
 }
 
-// \int_a^b w(tau) dtau = W(b) - W(a), for 0 <= a <= b <= beta
-[[gnu::always_inline]] inline double integral_w_tri(double a, double b, double beta) {
-    return W_tri(b, beta) - W_tri(a, beta);
+// \int_a^b w(tau) dtau with w(tau)=tau on [0, beta/2]
+[[gnu::always_inline]] inline double integral_w_tri_half(double a, double b) {
+    return W_tri_half(b) - W_tri_half(a);
 }
 
 // ===== Dynamical / fidelity susceptibility kernel =====
 // Integrate sigma_e(tau) * w(tau) over [imag_time_1, imag_time_2]
-// NOTE: If you call on [0, beta] you get the per-edge contribution to
-//       \int_0^beta min(tau,beta-tau) sigma_e(tau) dtau.
-// Move out off header!
+// using w(tau)=min(tau, beta-tau). We only integrate [0, beta/2] here
+// (callers ensure that) to avoid double counting symmetric time ordering.
 double Lattice::integrated_edge_energy_weighted(
     const Edge& edg,
     double imag_time_1,
@@ -2766,18 +2760,18 @@ double Lattice::integrated_edge_energy_weighted(
     double weighted = 0.0;
     double t_prev   = imag_time_1;
 
-    // accumulate piecewise-constant segments with triangular weight
+    // accumulate piecewise-constant segments with triangular weight on [0, beta/2]
     for (auto it = lo; it != hi; ++it) {
         const double t_curr = *it;
         // add spin * \int_{t_prev}^{t_curr} w(tau) dtau
-        weighted += spin * integral_w_tri(t_prev, t_curr, BETA);
+        weighted += spin * integral_w_tri_half(t_prev, t_curr);
         spin = -spin;
         t_prev = t_curr;
     }
 
     // tail to imag_time_2
     if (t_prev < imag_time_2) {
-        weighted += spin * integral_w_tri(t_prev, imag_time_2, BETA);
+        weighted += spin * integral_w_tri_half(t_prev, imag_time_2);
     }
 
     return weighted;
