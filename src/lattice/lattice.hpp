@@ -884,19 +884,19 @@ public:
      */
     inline double integrated_edge_energy(const Edge& edg, double imag_time_1, double imag_time_2);
 
-    // Integrated with weight w(tau)=beta-tau; used for dynamical susceptibility (0..beta/2)
+    // Integrated with weight w(tau)=min(tau, beta-tau) on [0, beta].
     double integrated_edge_energy_weighted(const Edge& edg, double imag_time_1, double imag_time_2);
 
     /**
      * @brief Return the total edge energy (integrated over imaginary time) over all edges 
-     * between the imaginary times 0 and beta/2 (weighted with w(tau)=beta-tau).
+     * between the imaginary times 0 and beta.
      * 
      * @return the total integrated edge energy
      * 
      */
     double total_integrated_edge_energy();
 
-    // Weighted version, integrated only to beta/2 for dynamical susceptibility
+    // Weighted version, w(tau)=min(tau, beta-tau) on [0, beta]
     double total_integrated_edge_energy_weighted();
 
     //TODO

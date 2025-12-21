@@ -2653,8 +2653,7 @@ double Lattice::total_integrated_edge_energy() {
 double Lattice::total_integrated_edge_energy_weighted() {
     double total_integrated_edge_energy = 0.;
     for (const auto& edg : egde_cache_) {
-        // only integrate up to beta/2 for dynamical susceptibility
-        total_integrated_edge_energy += integrated_edge_energy_weighted(edg, 0, 0.5 * BETA);
+        total_integrated_edge_energy += integrated_edge_energy_weighted(edg, 0, BETA);
     }
     return total_integrated_edge_energy;
 }
@@ -2719,21 +2718,23 @@ std::complex<double> Lattice::get_non_diag_M_M() {
     return {k_total, k_total};
 }
 
-// Antiderivative of w(tau) = tau (i.e. min(tau, beta - tau) on [0, beta/2])
-[[gnu::always_inline]] inline double W_tri_half(double t) {
-    // assumes 0 <= t <= beta/2
-    return 0.5 * t * t;
+// Antiderivative for w(tau)=min(tau, beta - tau) on [0, beta].
+[[gnu::always_inline]] inline double W_tri_full(double t, double beta) {
+    if (t <= 0.0) return 0.0;
+    const double half = 0.5 * beta;
+    if (t <= half) return 0.5 * t * t;
+    if (t <= beta) return beta * t - 0.5 * t * t - 0.25 * beta * beta;
+    return 0.25 * beta * beta;
 }
 
-// \int_a^b w(tau) dtau with w(tau)=tau on [0, beta/2]
-[[gnu::always_inline]] inline double integral_w_tri_half(double a, double b) {
-    return W_tri_half(b) - W_tri_half(a);
+// \int_a^b w(tau) dtau with w(tau)=min(tau, beta - tau)
+[[gnu::always_inline]] inline double integral_w_tri_full(double a, double b, double beta) {
+    return W_tri_full(b, beta) - W_tri_full(a, beta);
 }
 
 // ===== Dynamical / fidelity susceptibility kernel =====
 // Integrate sigma_e(tau) * w(tau) over [imag_time_1, imag_time_2]
-// using w(tau)=min(tau, beta-tau). We only integrate [0, beta/2] here
-// (callers ensure that) to avoid double counting symmetric time ordering.
+// using w(tau)=min(tau, beta-tau) on [0, beta].
 double Lattice::integrated_edge_energy_weighted(
     const Edge& edg,
     double imag_time_1,
@@ -2760,18 +2761,18 @@ double Lattice::integrated_edge_energy_weighted(
     double weighted = 0.0;
     double t_prev   = imag_time_1;
 
-    // accumulate piecewise-constant segments with triangular weight on [0, beta/2]
+    // accumulate piecewise-constant segments with triangular weight
     for (auto it = lo; it != hi; ++it) {
         const double t_curr = *it;
         // add spin * \int_{t_prev}^{t_curr} w(tau) dtau
-        weighted += spin * integral_w_tri_half(t_prev, t_curr);
+        weighted += spin * integral_w_tri_full(t_prev, t_curr, BETA);
         spin = -spin;
         t_prev = t_curr;
     }
 
     // tail to imag_time_2
     if (t_prev < imag_time_2) {
-        weighted += spin * integral_w_tri_half(t_prev, imag_time_2);
+        weighted += spin * integral_w_tri_full(t_prev, imag_time_2, BETA);
     }
 
     return weighted;
