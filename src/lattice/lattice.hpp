@@ -741,7 +741,7 @@ public:
     double total_integrated_plaquette_energy();
 
     /**
-     * @brief Integrated STAR–energy difference for a tuple–plus–single–flip combination update.
+     * @brief Integrated STAR–energy difference for a plaquette–plus–single–flip combination update.
      *
      * For each star centered at a vertex touched by any edge in @p plaquette_edges,
      * this computes the (bare) change of the star energy integrated over the
