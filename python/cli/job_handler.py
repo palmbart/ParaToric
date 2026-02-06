@@ -86,11 +86,19 @@ class JobHandler:
                          'type': 'real',
                          'output_str': r'$\langle \chi_{\sigma^x_l} \rangle$',
                          'output_func': self._real_output},
+                        {'name': 'sigma_x_dynamical_susceptibility',
+                         'type': 'real',
+                         'output_str': r'$\langle \chi_{\sigma^x_l} \rangle$',
+                         'output_func': self._real_output},
                         {'name': 'sigma_z',
                          'type': 'real',
                          'output_str': r'$\langle \sigma^z_l \rangle$',
                          'output_func': self._real_output},
                         {'name': 'sigma_z_susceptibility',
+                         'type': 'real',
+                         'output_str': r'$\langle \chi_{\sigma^z_l} \rangle$',
+                         'output_func': self._real_output},
+                        {'name': 'sigma_z_dynamical_susceptibility',
                          'type': 'real',
                          'output_str': r'$\langle \chi_{\sigma^z_l} \rangle$',
                          'output_func': self._real_output},
@@ -563,7 +571,7 @@ class JobHandler:
                        N_samples: int,
                        N_thermalization: int,
                        N_between_samples: int,
-                       T_low: float, T_high: float, T_steps: int,
+                       T_lower: float, T_upper: float, T_steps: int,
                        mu: float,
                        h: float,
                        h_therm: float,
@@ -586,9 +594,9 @@ class JobHandler:
         self.__set_lattice_params(**kwargs)
 
         # only get name dont change...
-        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_T={T_low}_to_{T_high}", begin_time, 'etc_T_sweep')
+        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_T={T_lower}_to_{T_upper}", begin_time, 'etc_T_sweep')
 
-        temperatures = np.linspace(T_low, T_high, T_steps)
+        temperatures = np.linspace(T_lower, T_upper, T_steps)
         betas = 1 / temperatures
 
         start = time.perf_counter()
@@ -604,7 +612,7 @@ class JobHandler:
 
             results = np.array(results)
         else:
-            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, 1/T_low, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
+            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, 1/T_lower, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
 
             results = np.array([results])
 
@@ -621,7 +629,7 @@ class JobHandler:
         sweep_params = {'N_samples': N_samples,
                         'N_thermalization': N_thermalization,
                         'N_between_samples': N_between_samples,
-                        'T_low': T_low, 'T_high': T_high, 'T_steps': T_steps,
+                        'T_lower': T_lower, 'T_upper': T_upper, 'T_steps': T_steps,
                         'h': h, 'h_therm': h_therm,
                         'lmbda': lmbda, 'lmbda_therm': lmbda_therm,
                         'mu': mu,
@@ -755,7 +763,7 @@ class JobHandler:
                        N_between_samples: int,
                        temperature: float,
                        mu: float,
-                       h_low: float, h_high: float, h_steps: int,
+                       h_lower: float, h_upper: float, h_steps: int,
                        h_therm: float,
                        J: float,
                        lmbda: float,
@@ -775,9 +783,9 @@ class JobHandler:
 
         self.__set_lattice_params(**kwargs)
 
-        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h_low}_to_{h_high}_lmbda={lmbda}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_h_sweep')
+        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h_lower}_to_{h_upper}_lmbda={lmbda}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_h_sweep')
 
-        hs = np.linspace(h_low, h_high, h_steps)
+        hs = np.linspace(h_lower, h_upper, h_steps)
         beta = 1 / temperature
 
         start = time.perf_counter()
@@ -793,7 +801,7 @@ class JobHandler:
 
             results = np.array(results)
         else:
-            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, beta, mu, h_low, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
+            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, beta, mu, h_lower, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
 
             results = np.array([results])
 
@@ -811,7 +819,7 @@ class JobHandler:
                         'N_thermalization': N_thermalization,
                         'N_between_samples': N_between_samples,
                         'temperature': temperature, 
-                        'h_low': h_low, 'h_high': h_high, 'h_steps': h_steps, 'h_therm': h_therm,
+                        'h_lower': h_lower, 'h_upper': h_upper, 'h_steps': h_steps, 'h_therm': h_therm,
                         'lmbda': lmbda, 'lmbda_therm': lmbda_therm,
                         'mu': mu,
                         'J': J,
@@ -849,7 +857,7 @@ class JobHandler:
                            h: float,
                            h_therm: float,
                            J: float,
-                           lmbda_low: float, lmbda_high: float, lmbda_steps: int,
+                           lmbda_lower: float, lmbda_upper: float, lmbda_steps: int,
                            lmbda_therm: float,
                            N_resamples: int,
                            custom_therm: bool,
@@ -866,9 +874,9 @@ class JobHandler:
 
         self.__set_lattice_params(**kwargs)
 
-        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h}_lmbda={lmbda_low}_to_{lmbda_high}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_lmbda_sweep')
+        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h}_lmbda={lmbda_lower}_to_{lmbda_upper}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_lmbda_sweep')
 
-        lmbdas = np.linspace(lmbda_low, lmbda_high, lmbda_steps)
+        lmbdas = np.linspace(lmbda_lower, lmbda_upper, lmbda_steps)
         beta = 1 / temperature
 
         start = time.perf_counter()
@@ -884,7 +892,7 @@ class JobHandler:
 
             results = np.array(results)
         else:
-            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda_low, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
+            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda_lower, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
 
             results = np.array([results])
 
@@ -903,7 +911,7 @@ class JobHandler:
                         'N_between_samples': N_between_samples,
                         'temperature': temperature, 
                         'h': h, 'h_therm': h_therm,
-                        'lmbda_low': lmbda_low, 'lmbda_high': lmbda_high, 'lmbda_steps': lmbda_steps, 'lmbda_therm': lmbda_therm,
+                        'lmbda_lower': lmbda_lower, 'lmbda_upper': lmbda_upper, 'lmbda_steps': lmbda_steps, 'lmbda_therm': lmbda_therm,
                         'mu': mu,
                         'J': J,
                         'N_resamples': N_resamples,
@@ -941,7 +949,7 @@ class JobHandler:
                             J: float,
                             lmbda: float,
                             radius: float,
-                            Theta_low: float, Theta_high: float, Theta_steps: int,
+                            Theta_lower: float, Theta_upper: float, Theta_steps: int,
                             N_resamples: int,
                             observables: str = 'energy',
                             seed: int = 0,
@@ -956,9 +964,9 @@ class JobHandler:
 
         self.__set_lattice_params(**kwargs)
 
-        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_radius={radius}_Theta={Theta_low}_to_{Theta_high}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_circle_sweep')
+        output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_radius={radius}_Theta={Theta_lower}_to_{Theta_upper}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_circle_sweep')
 
-        angles_array = np.array([Theta_low + (Theta_high - Theta_low)/Theta_steps * x for x in range(0, Theta_steps)])
+        angles_array = np.array([Theta_lower + (Theta_upper - Theta_lower)/Theta_steps * x for x in range(0, Theta_steps)])
 
         lambda_h_pair_array = np.array([(lmbda + np.cos(angle)*radius, h + np.sin(angle)*radius) for angle in angles_array])
 
@@ -994,7 +1002,7 @@ class JobHandler:
                         'mu': mu,
                         'J': J, 
                         'radius': radius, 
-                        'Theta_low': Theta_low, 'Theta_high': Theta_high, 'Theta_steps': Theta_steps,
+                        'Theta_lower': Theta_lower, 'Theta_upper': Theta_upper, 'Theta_steps': Theta_steps,
                         'N_resamples': N_resamples,
                         'observables': observables,
                         'integrated_autocorrelation_times': results[:, 4, :].T,

@@ -741,7 +741,7 @@ public:
     double total_integrated_plaquette_energy();
 
     /**
-     * @brief Integrated STAR–energy difference for a tuple–plus–single–flip combination update.
+     * @brief Integrated STAR–energy difference for a plaquette–plus–single–flip combination update.
      *
      * For each star centered at a vertex touched by any edge in @p plaquette_edges,
      * this computes the (bare) change of the star energy integrated over the
@@ -884,7 +884,7 @@ public:
      */
     inline double integrated_edge_energy(const Edge& edg, double imag_time_1, double imag_time_2);
 
-    //TODO
+    // Integrated with weight w(tau)=min(tau, beta-tau) on [0, beta].
     double integrated_edge_energy_weighted(const Edge& edg, double imag_time_1, double imag_time_2);
 
     /**
@@ -896,7 +896,7 @@ public:
      */
     double total_integrated_edge_energy();
 
-    //TODO
+    // Weighted version, w(tau)=min(tau, beta-tau) on [0, beta]
     double total_integrated_edge_energy_weighted();
 
     //TODO
@@ -1407,70 +1407,63 @@ inline double Lattice::integrated_edge_energy_diff_combination(
             "integrated_edge_energy_diff_combination: time interval must be non-zero");
     }
 
-    // -- find initial spin at imag_time_1 ----------------------------------
     const auto& spin_flips = g[edg].spin_flips;   // sorted flip times
-    auto it_edge = std::lower_bound(
-        spin_flips.begin(), spin_flips.end(), imag_time_1);
+    auto it_edge = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
+    auto edge_end = std::upper_bound(it_edge, spin_flips.end(), imag_time_2);
 
     int base_spin  = get_spin(edg);
     int spin_prev  = ((it_edge - spin_flips.begin()) & 1) ? -base_spin : base_spin;
     int spin_after = spin_prev;
 
-    // -- merge two sorted streams: edge flips + external flips ------------
-    size_t i_delta = 0;
-    const size_t N_delta = spin_flip_lookup.size();
+    const auto* delta_begin = spin_flip_lookup.data();
+    const auto* delta_finish = delta_begin + spin_flip_lookup.size();
+
+    auto delta_it = delta_begin;
+    while (delta_it != delta_finish && delta_it->first < imag_time_1) {
+        ++delta_it;
+    }
+    auto delta_end = delta_it;
+    while (delta_end != delta_finish && delta_end->first < imag_time_2) {
+        ++delta_end;
+    }
+
     double t_prev = imag_time_1;
-    double energy_before = 0.0, energy_after = 0.0;
+    double energy_before = 0.0;
+    double energy_after  = 0.0;
 
-    constexpr double no_imaginary_time_found = -1.0;
+    while (it_edge != edge_end || delta_it != delta_end) {
+        double t_next;
+        bool edge_event = false;
 
-    auto next_edge_time = [&]() -> double {
-        return (it_edge != spin_flips.end() && *it_edge < imag_time_2)
-             ? *it_edge
-             : no_imaginary_time_found;
-    };
-    auto next_delta_time = [&]() -> double {
-        return (i_delta < N_delta && spin_flip_lookup[i_delta].first < imag_time_2)
-             ? spin_flip_lookup[i_delta].first
-             : no_imaginary_time_found;
-    };
-
-    while (true) {
-        double t_edge  = next_edge_time();
-        double t_delta = next_delta_time();
-        double t_curr;
-
-        if (t_edge < 0 && t_delta < 0) {
-            break;
-        } else if (t_edge < 0) {
-            t_curr = t_delta;
-        } else if (t_delta < 0) {
-            t_curr = t_edge;
+        if (it_edge != edge_end) {
+            const double t_edge = *it_edge;
+            if (delta_it == delta_end || t_edge <= delta_it->first) {
+                edge_event = true;
+                t_next = t_edge;
+            } else {
+                t_next = delta_it->first;
+            }
         } else {
-            t_curr = std::min(t_edge, t_delta);
+            t_next = delta_it->first;
         }
 
-        double dt = t_curr - t_prev;
+        double dt = t_next - t_prev;
         energy_before += dt * spin_prev;
         energy_after  += dt * spin_after;
-        t_prev = t_curr;
+        t_prev = t_next;
 
-        // edge flip toggles both histories
-        const bool edge_event = (t_edge >= 0) && (t_delta < 0 || t_edge <= t_delta);
         if (edge_event) {
             spin_prev  = -spin_prev;
             spin_after = -spin_after;
             ++it_edge;
         }
 
-        // consume all lookup flips at this same time
-        while (i_delta < N_delta && spin_flip_lookup[i_delta].first == t_curr) {
+        while (delta_it != delta_end && delta_it->first == t_next) {
             spin_after = -spin_after;
-            ++i_delta;
+            ++delta_it;
         }
     }
 
-    // -- final segment until imag_time_2 ----------------------------------
     double dt_tail = imag_time_2 - t_prev;
     energy_before += dt_tail * spin_prev;
     energy_after  += dt_tail * spin_after;
@@ -1525,80 +1518,109 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
     double imag_time_2, 
     const std::vector<std::pair<double, int>>& spin_flip_lookup
 ) {
-    struct Node { double t; std::vector<double>::const_iterator it, end; };
-    auto cmp = [](const Node& a, const Node& b){ return a.t > b.t; };
+    struct EdgeStream {
+        double t;
+        std::vector<double>::const_iterator it;
+        std::vector<double>::const_iterator end;
+    };
 
-    thread_local std::vector<Node> heap_tls;
-    heap_tls.clear();
-    heap_tls.reserve(tuple_edges.size());
+    thread_local std::vector<EdgeStream> streams_tls;
+    streams_tls.clear();
+    streams_tls.reserve(tuple_edges.size());
 
     int spin_prod = 1;
-
-    for (Edge e : tuple_edges) {
+    for (const Edge& e : tuple_edges) {
         const auto& flips = g[e].spin_flips;
         auto lo = std::lower_bound(flips.begin(), flips.end(), imag_time_1);
         auto hi = std::upper_bound(lo,           flips.end(), imag_time_2);
 
-        if (lo != hi) heap_tls.push_back({*lo, lo, hi});
+        if (lo != hi) {
+            streams_tls.push_back({*lo, lo, hi});
+        }
 
         int s = get_spin(e);
-        if (std::distance(flips.begin(), lo) & 1) s = -s;
+        if (std::distance(flips.begin(), lo) & 1) {
+            s = -s;
+        }
         spin_prod *= s;
     }
-    std::make_heap(heap_tls.begin(), heap_tls.end(), cmp);
 
-    // VERY IMPORTANT: This tuple here does not refer to the input "tuple_edges" but instead to the tuple where the tuple flip takes place
-    // In principle, we don't need it for 2D but for special 3D cases, like when looking at cubic 12-spin interactions which share 3 bonds with a neighboring star.
-    // Remember that spin_flip_lookup contains the plaquette flip (once) that is marked with 1 as well as the single spin flips. These
-    // single spin flips all take place on the tuple where the tuple flips take place, i.e. the number of these tells us the number links
-    // we share with the tuple where the tuple_flip takes place. This is the number we need.
+    size_t min_idx = 0;
+    const auto refresh_min = [&]() {
+        if (streams_tls.empty()) return;
+        size_t idx = 0;
+        double best = streams_tls[0].t;
+        for (size_t i = 1; i < streams_tls.size(); ++i) {
+            const double cand = streams_tls[i].t;
+            if (cand < best) {
+                best = cand;
+                idx = i;
+            }
+        }
+        min_idx = idx;
+    };
+    if (!streams_tls.empty()) {
+        refresh_min();
+    }
+
+    const auto* delta_it  = spin_flip_lookup.data();
+    const auto* delta_end = delta_it + spin_flip_lookup.size();
+
     const bool odd_tuple = ((spin_flip_lookup.size() & 1) == 0);
-    double E_before = 0., E_after  = 0.;
-    int    spin_before = spin_prod, spin_after = spin_prod;
-    double t_prev = imag_time_1;
-    size_t idx_delta = 0;
+    double E_before = 0.0;
+    double E_after  = 0.0;
+    int spin_before = spin_prod;
+    int spin_after  = spin_prod;
+    double t_prev   = imag_time_1;
 
-    while (!heap_tls.empty() || idx_delta < spin_flip_lookup.size()) {
+    while (delta_it != delta_end || !streams_tls.empty()) {
         double t_next;
         bool edge_event = false;
 
-        if (!heap_tls.empty() 
-        && (idx_delta == spin_flip_lookup.size() || heap_tls.front().t <= spin_flip_lookup[idx_delta].first)) {
-            edge_event = true;
-            t_next     = heap_tls.front().t;
+        if (!streams_tls.empty()) {
+            const double t_edge = streams_tls[min_idx].t;
+            if (delta_it == delta_end || t_edge <= delta_it->first) {
+                edge_event = true;
+                t_next     = t_edge;
+            } else {
+                t_next = delta_it->first;
+            }
         } else {
-            t_next = spin_flip_lookup[idx_delta].first;
+            t_next = delta_it->first;
         }
 
-        double dt = t_next - t_prev;
+        const double dt = t_next - t_prev;
         E_before += dt * spin_before;
         E_after  += dt * spin_after;
         t_prev    = t_next;
 
         if (edge_event) {
-            /* flip both streams */
             spin_before = -spin_before;
             spin_after  = -spin_after;
 
-            /* pop root */
-            std::pop_heap(heap_tls.begin(), heap_tls.end(), cmp);
-            Node n = heap_tls.back();
-            heap_tls.pop_back();
-
-            if (++n.it != n.end) {
-                n.t = *n.it;
-                heap_tls.push_back(n);
-                std::push_heap(heap_tls.begin(), heap_tls.end(), cmp);
+            auto& stream = streams_tls[min_idx];
+            if (++stream.it == stream.end) {
+                streams_tls[min_idx] = streams_tls.back();
+                streams_tls.pop_back();
+            } else {
+                stream.t = *stream.it;
             }
+
+            if (!streams_tls.empty()) {
+                refresh_min();
+            }
+            continue;
         }
 
-        while (idx_delta < spin_flip_lookup.size() 
-        && spin_flip_lookup[idx_delta].first == t_next) {
-            if (spin_flip_lookup[idx_delta].second != 1 || odd_tuple)
+        const double current_time = delta_it->first;
+        do {
+            if (delta_it->second != 1 || odd_tuple) {
                 spin_after = -spin_after;
-            ++idx_delta;
-        }
+            }
+            ++delta_it;
+        } while (delta_it != delta_end && delta_it->first == current_time);
     }
+
     return E_after - E_before;
 }
 
@@ -1606,18 +1628,15 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
 inline double Lattice::integrated_tuple_energy(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
 ) {
-    struct Node {
+    struct EdgeStream {
         double t;
-        std::vector<double>::const_iterator it, end;
-    };
-    auto cmp = [](const Node& a, const Node& b){
-        return a.t > b.t;
+        std::vector<double>::const_iterator it;
+        std::vector<double>::const_iterator end;
     };
 
-    // build a min‑heap over the first flip of each edge in the tuple
-    thread_local std::vector<Node> heap_tls;
-    heap_tls.clear();
-    heap_tls.reserve(tuple_edges.size());
+    thread_local std::vector<EdgeStream> streams_tls;
+    streams_tls.clear();
+    streams_tls.reserve(tuple_edges.size());
 
     int spin_prod = 1;
     for (auto const& edg : tuple_edges) {
@@ -1630,7 +1649,7 @@ inline double Lattice::integrated_tuple_energy(
                                    imag_time_2);
 
         if (lo != hi) {
-            heap_tls.push_back({ *lo, lo, hi });
+            streams_tls.push_back({ *lo, lo, hi });
         }
 
         int before_count = static_cast<int>(lo - spin_flips.begin());
@@ -1640,36 +1659,48 @@ inline double Lattice::integrated_tuple_energy(
         }
         spin_prod *= s;
     }
-    std::make_heap(heap_tls.begin(), heap_tls.end(), cmp);
+    size_t min_idx = 0;
+    const auto refresh_min = [&]() {
+        if (streams_tls.empty()) return;
+        size_t idx = 0;
+        double best = streams_tls[0].t;
+        for (size_t i = 1; i < streams_tls.size(); ++i) {
+            double cand = streams_tls[i].t;
+            if (cand < best) {
+                best = cand;
+                idx = i;
+            }
+        }
+        min_idx = idx;
+    };
+    if (!streams_tls.empty()) {
+        refresh_min();
+    }
 
-    // sweep through all flip times in ascending order
     double energy_before = 0.0;
     double t_prev        = imag_time_1;
     int    spin          = spin_prod;
 
-    while (!heap_tls.empty()) {
-        // pop the earliest event
-        std::pop_heap(heap_tls.begin(), heap_tls.end(), cmp);
-        Node node = heap_tls.back();
-        heap_tls.pop_back();
-
-        double t_curr = node.t;
-        double dt     = t_curr - t_prev;
+    while (!streams_tls.empty()) {
+        const double t_curr = streams_tls[min_idx].t;
+        const double dt     = t_curr - t_prev;
         energy_before += dt * spin;
-        spin = -spin;                // flip spin for next interval
+        spin = -spin;
+        t_prev = t_curr;
 
-        // advance this edge’s iterator
-        ++node.it;
-        if (node.it != node.end) {
-            node.t = *node.it;
-            heap_tls.push_back(node);
-            std::push_heap(heap_tls.begin(), heap_tls.end(), cmp);
+        auto& stream = streams_tls[min_idx];
+        if (++stream.it == stream.end) {
+            streams_tls[min_idx] = streams_tls.back();
+            streams_tls.pop_back();
+        } else {
+            stream.t = *stream.it;
         }
 
-        t_prev = t_curr;
+        if (!streams_tls.empty()) {
+            refresh_min();
+        }
     }
 
-    // final segment up to imag_time_2
     if (t_prev < imag_time_2) {
         energy_before += (imag_time_2 - t_prev) * spin;
     }

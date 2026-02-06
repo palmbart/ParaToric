@@ -268,8 +268,10 @@ inline std::tuple<double,double,double,double> get_bootstrap_statistics_fm(
  * @return a tuple of the mean, the standard error of the mean, the Binder ratio and the standard error of the Binder ratio
  */
 inline std::tuple<double,double,double,double> get_bootstrap_statistics_susceptibility(
-    const std::vector<double>& kL, const std::vector<double>& kR, double beta, 
-    double h, double Nsites, std::shared_ptr<RNG> rng, size_t n_iter = 1000
+    const std::vector<double>& kL,
+    const std::vector<double>& kR,
+    std::shared_ptr<RNG> rng,
+    size_t n_iter = 1000
 ) {
     const size_t N = kL.size();
     if (kR.size() != N)
@@ -427,7 +429,94 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
     return {chi_mean_bias_corrected, chi_std, binder_mean, binder_std};
 }
 
+inline std::tuple<double,double,double,double> bootstrap_offdiag_dynamical_susceptibility(
+    const std::vector<double>& kL, const std::vector<double>& kR, 
+    double Nsites, std::shared_ptr<RNG> rng, size_t n_iter = 1000
+) {
+    const size_t N = kL.size();
+    if (kR.size() != N) throw std::invalid_argument("kL/kR length mismatch");
+    if (N < 2) throw std::invalid_argument("need >=2 samples");
+    if (Nsites <= 0.0) throw std::invalid_argument("Nsites must be positive");
+
+    double blk_len = std::max(opt_block_length(kL), opt_block_length(kR));
+
+    // --- original-sample covariance for bias correction ---
+    double sumL_raw = 0.0, sumR_raw = 0.0, sumLR_raw = 0.0;
+    double sumLR2_raw = 0.0, sumLR4_raw = 0.0;
+    for (size_t i = 0; i < N; ++i) {
+        const double L = kL[i];
+        const double R = kR[i];
+        const double LR_intensive = (L * R) / Nsites;
+
+        sumL_raw   += L;
+        sumR_raw   += R;
+        sumLR_raw  += L * R;
+        sumLR2_raw += LR_intensive * LR_intensive;
+        sumLR4_raw += LR_intensive * LR_intensive * LR_intensive * LR_intensive;
+    }
+    const double meanL_raw  = sumL_raw  / N;
+    const double meanR_raw  = sumR_raw  / N;
+    const double meanLR_raw = sumLR_raw / N;
+    const double cov_hat    = (meanLR_raw - meanL_raw * meanR_raw) / Nsites;
+    double e2_raw = sumLR2_raw / N;
+    double e4_raw = sumLR4_raw / N;
+    if (e2_raw == 0.0) { e2_raw = 1e-12; e4_raw = 0.0; }
+    const double binder_hat = e4_raw / (e2_raw * e2_raw);
+
+    std::vector<double> cov_samples;
+    std::vector<double> binder_samples;
+    cov_samples.reserve(n_iter);
+    binder_samples.reserve(n_iter);
+
+    for (size_t it = 0; it < n_iter; ++it) {
+        auto idx = stationary_bootstrap(kL, blk_len, N, rng);
+
+        double sumL = 0.0, sumR = 0.0, sumLR = 0.0;
+        double sumLR2 = 0.0, sumLR4 = 0.0;
+
+        for (auto i : idx) {
+            const double L = kL[i];
+            const double R = kR[i];
+            const double LR_intensive = (L * R) / Nsites;
+
+            sumL   += L;
+            sumR   += R;
+            sumLR  += L * R;
+            sumLR2 += LR_intensive * LR_intensive;
+            sumLR4 += LR_intensive * LR_intensive * LR_intensive * LR_intensive;
+        }
+
+        const double meanL  = sumL  / N;
+        const double meanR  = sumR  / N;
+        const double meanLR = sumLR / N;
+        const double covLR  = (meanLR - meanL * meanR) / Nsites;
+
+        cov_samples.push_back(covLR);
+
+        double e2 = sumLR2 / N;
+        double e4 = sumLR4 / N;
+        if (e2 == 0.0) { e2 = 1e-12; e4 = 0.0; }
+        binder_samples.push_back(e4 / (e2 * e2));
+    }
+
+    auto summarize = [](const std::vector<double>& v) {
+        const double mu = std::accumulate(v.begin(), v.end(), 0.0) / v.size();
+        double var = 0.0;
+        for (double x : v) {
+            const double d = x - mu;
+            var += d * d;
+        }
+        var /= (v.size() > 1 ? (v.size() - 1) : 1);
+        return std::make_pair(mu, std::sqrt(var));
+    };
+
+    auto [cov_mean,    cov_std]    = summarize(cov_samples);
+    auto [binder_mean, binder_std] = summarize(binder_samples);
+    const double cov_mean_bias_corrected    = 2.0 * cov_hat    - cov_mean;
+    const double binder_mean_bias_corrected = 2.0 * binder_hat - binder_mean;
+
+    return {cov_mean_bias_corrected, cov_std, binder_mean_bias_corrected, binder_std};
+}
+
 } // namespace paratoric::statistics
-
-
 

@@ -2706,6 +2706,9 @@ std::complex<double> Lattice::get_diag_dynamical_M_M() {
     );
 
     double integrated_magnetization = total_integrated_edge_energy_weighted();
+    // Eq. (9) style estimators correspond to 1/2 * \int_0^\beta min(tau, beta-tau) C(tau) dtau.
+    // integrated_edge_energy_weighted() returns the full triangular-kernel integral, so we apply 1/2 here.
+    integrated_magnetization *= 0.5;
     return {static_cast<double>(integrated_magnetization / (double)(get_edge_count()) ), static_cast<double>(magnetization)}; 
 }
 
@@ -2718,28 +2721,23 @@ std::complex<double> Lattice::get_non_diag_M_M() {
     return {k_total, k_total};
 }
 
-// Antiderivative of w(tau) = min(tau, beta-tau), continuous on [0,beta]
-[[gnu::always_inline]] inline double W_tri(double t, double beta) {
-    // assumes 0 <= t <= beta
+// Antiderivative for w(tau)=min(tau, beta - tau) on [0, beta].
+[[gnu::always_inline]] inline double W_tri_full(double t, double beta) {
+    if (t <= 0.0) return 0.0;
     const double half = 0.5 * beta;
-    if (t <= half) {
-        return 0.5 * t * t;                    // \int tau dtau
-    } else {
-        // \int (beta - tau) dtau, matched continuously at beta/2
-        return beta * t - 0.5 * t * t - 0.25 * beta * beta;
-    }
+    if (t <= half) return 0.5 * t * t;
+    if (t <= beta) return beta * t - 0.5 * t * t - 0.25 * beta * beta;
+    return 0.25 * beta * beta;
 }
 
-// \int_a^b w(tau) dtau = W(b) - W(a), for 0 <= a <= b <= beta
-[[gnu::always_inline]] inline double integral_w_tri(double a, double b, double beta) {
-    return W_tri(b, beta) - W_tri(a, beta);
+// \int_a^b w(tau) dtau with w(tau)=min(tau, beta - tau)
+[[gnu::always_inline]] inline double integral_w_tri_full(double a, double b, double beta) {
+    return W_tri_full(b, beta) - W_tri_full(a, beta);
 }
 
 // ===== Dynamical / fidelity susceptibility kernel =====
 // Integrate sigma_e(tau) * w(tau) over [imag_time_1, imag_time_2]
-// NOTE: If you call on [0, beta] you get the per-edge contribution to
-//       \int_0^beta min(tau,beta-tau) sigma_e(tau) dtau.
-// Move out off header!
+// using w(tau)=min(tau, beta-tau) on [0, beta].
 double Lattice::integrated_edge_energy_weighted(
     const Edge& edg,
     double imag_time_1,
@@ -2770,14 +2768,14 @@ double Lattice::integrated_edge_energy_weighted(
     for (auto it = lo; it != hi; ++it) {
         const double t_curr = *it;
         // add spin * \int_{t_prev}^{t_curr} w(tau) dtau
-        weighted += spin * integral_w_tri(t_prev, t_curr, BETA);
+        weighted += spin * integral_w_tri_full(t_prev, t_curr, BETA);
         spin = -spin;
         t_prev = t_curr;
     }
 
     // tail to imag_time_2
     if (t_prev < imag_time_2) {
-        weighted += spin * integral_w_tri(t_prev, imag_time_2, BETA);
+        weighted += spin * integral_w_tri_full(t_prev, imag_time_2, BETA);
     }
 
     return weighted;
