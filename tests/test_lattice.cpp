@@ -761,11 +761,8 @@ BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_1) {
     const auto& [bare_energy_2, star_centers_2, bare_star_potential_energy_diffs_2] 
     = lat.integrated_star_energy_diff_combination(0, 0.1, 4.9, single_spin_flip_lookup, 2.1);
 
-    std::println("Test1");
     BOOST_CHECK_CLOSE(-19.2, bare_energy_1, 0.001);
-    std::println("");
     BOOST_CHECK_CLOSE(-19.2, bare_energy_2, 0.001);
-    std::println("");
 }
 
 BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_2) {
@@ -786,11 +783,8 @@ BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_2) {
     const auto& [bare_energy_2, star_centers_2, bare_star_potential_energy_diffs_2] 
     = lat.integrated_star_energy_diff_combination(0, 0.1, 4.9, single_spin_flip_lookup, 2.1);
 
-    std::println("Test2");
     BOOST_CHECK_CLOSE(-9.6, bare_energy_1, 0.001);
-    std::println("");
     BOOST_CHECK_CLOSE(-9.6, bare_energy_2, 0.001);
-    std::println("");
 }
 
 BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_3) {
@@ -811,11 +805,8 @@ BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_3) {
     const auto& [bare_energy_2, star_centers_2, bare_star_potential_energy_diffs_2] 
     = lat.integrated_star_energy_diff_combination(0, 0.1, 4.9, single_spin_flip_lookup, 2.1);
 
-    std::println("Test3");
     BOOST_CHECK_CLOSE(-21.2, bare_energy_1, 0.001);
-    std::println("");
     BOOST_CHECK_CLOSE(-21.2, bare_energy_2, 0.001);
-    std::println("");
 }
 
 BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_4) {
@@ -836,11 +827,8 @@ BOOST_AUTO_TEST_CASE(integrated_star_energy_diff_combination_test_4) {
     const auto& [bare_energy_2, star_centers_2, bare_star_potential_energy_diffs_2] 
     = lat.integrated_star_energy_diff_combination(0, 0.1, 4.9, single_spin_flip_lookup, 2.1);
 
-    std::println("Test4");
     BOOST_CHECK_CLOSE(-19.2, bare_energy_1, 0.001);
-    std::println("");
     BOOST_CHECK_CLOSE(-19.2, bare_energy_2, 0.001);
-    std::println("");
 }
 
 BOOST_AUTO_TEST_CASE(integrated_edge_energy_diff_test_1) {
