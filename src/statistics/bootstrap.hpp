@@ -268,8 +268,10 @@ inline std::tuple<double,double,double,double> get_bootstrap_statistics_fm(
  * @return a tuple of the mean, the standard error of the mean, the Binder ratio and the standard error of the Binder ratio
  */
 inline std::tuple<double,double,double,double> get_bootstrap_statistics_susceptibility(
-    const std::vector<double>& kL, const std::vector<double>& kR, double beta, 
-    double h, double Nsites, std::shared_ptr<RNG> rng, size_t n_iter = 1000
+    const std::vector<double>& kL,
+    const std::vector<double>& kR,
+    std::shared_ptr<RNG> rng,
+    size_t n_iter = 1000
 ) {
     const size_t N = kL.size();
     if (kR.size() != N)
@@ -517,5 +519,4 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_dynamical_susce
 }
 
 } // namespace paratoric::statistics
-
 

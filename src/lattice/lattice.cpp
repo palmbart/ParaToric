@@ -2706,6 +2706,9 @@ std::complex<double> Lattice::get_diag_dynamical_M_M() {
     );
 
     double integrated_magnetization = total_integrated_edge_energy_weighted();
+    // Eq. (9) style estimators correspond to 1/2 * \int_0^\beta min(tau, beta-tau) C(tau) dtau.
+    // integrated_edge_energy_weighted() returns the full triangular-kernel integral, so we apply 1/2 here.
+    integrated_magnetization *= 0.5;
     return {static_cast<double>(integrated_magnetization / (double)(get_edge_count()) ), static_cast<double>(magnetization)}; 
 }
 

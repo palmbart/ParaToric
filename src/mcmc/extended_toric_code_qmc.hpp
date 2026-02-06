@@ -3233,8 +3233,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             } else {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                 = paratoric::statistics::get_bootstrap_statistics_susceptibility(
-                    obs_real, obs_imag, config.lat_spec.beta, config.param_spec.h, 
-                    lat.get_edge_count(), rng, config.sim_spec.N_resamples
+                    obs_real, obs_imag, rng, config.sim_spec.N_resamples
                 );
                 observable_mean_vector[k] = observable_mean;
                 observable_std_vector[k] = observable_std;
@@ -3508,7 +3507,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 if ((config.sim_spec.observables[k] == "sigma_z_susceptibility" && Basis == 'x')) {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::bootstrap_offdiag_susceptibility(
-                        obs_real, config.lat_spec.beta, config.param_spec.lmbda, 
+                        obs_real, config.lat_spec.beta, lmbda, 
                         lat.get_edge_count(), rng, config.sim_spec.N_resamples
                     );
                     observable_mean_vector[k] = observable_mean;
@@ -3520,7 +3519,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 } else if (config.sim_spec.observables[k] == "sigma_x_susceptibility" && Basis == 'z') {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::bootstrap_offdiag_susceptibility(
-                        obs_real, config.lat_spec.beta, config.param_spec.h, 
+                        obs_real, config.lat_spec.beta, h, 
                         lat.get_edge_count(), rng, config.sim_spec.N_resamples
                     );
                     observable_mean_vector[k] = observable_mean;
@@ -3544,8 +3543,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 } else {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::get_bootstrap_statistics_susceptibility(
-                        obs_real, obs_imag, config.lat_spec.beta, config.param_spec.h, 
-                        lat.get_edge_count(), rng, config.sim_spec.N_resamples
+                        obs_real, obs_imag, rng, config.sim_spec.N_resamples
                     );
                     observable_mean_vector[k] = observable_mean;
                     observable_std_vector[k] = observable_std;
