@@ -212,7 +212,7 @@ $ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 50000 -r
 Acknowledgements
 ----------------
 
-This research was funded by the European Research Council (ERC) under the European Union’s Horizon 2020 research and innovation program -- ERC Starting Grant SimUcQuam (Grant Agreement No. 948141), and by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany's Excellence Strategy -- EXC-2111 -- project number 390814868. The project/research is part of the Munich Quantum Valley, which is supported by the Bavarian state government with funds from the Hightech Agenda Bayern Plus.
+This research was funded by the European Research Council (ERC) under the European Union’s Horizon 2020 research and innovation program -- ERC Starting Grant SimUcQuam (Grant Agreement No. 948141), and by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany's Excellence Strategy -- EXC-2111 -- project number 390814868. The project/research is part of the Munich Quantum Valley, which is supported by the Bavarian state government with funds from the Hightech Agenda Bayern Plus. L.P. acknowledges financial support from ANR-23-CE30-0018.
 
 [1]: https://doi.org/10.1103/PhysRevB.85.195104
 [2]: https://slurm.schedmd.com/
