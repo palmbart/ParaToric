@@ -1035,6 +1035,14 @@ public:
     bool is_winding_plaquette_percolating();
 
     /**
+     * @brief Searches for a plaquette percolating ("global") cluster of plaquettes (i.e. connected by spin = -1) in the lattice for open boundaries.
+     * 
+     * @return bool which signals plaquette percolation (1) or plaquette non-percolation (0)
+     * 
+     */
+    bool is_plaquette_percolating();
+
+    /**
      * @brief TODO.
      * 
      * @return TODO.

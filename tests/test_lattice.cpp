@@ -1142,6 +1142,87 @@ BOOST_AUTO_TEST_CASE(is_winding_percolating_test_7) {
     BOOST_CHECK(1 == lat.is_winding_percolating());
 }
 
+BOOST_AUTO_TEST_CASE(is_plaquette_percolating_test_1) {
+     LatSpec spec = {
+        'x', // basis
+        "square", // lattice type
+        8, // system size
+        6., // beta
+        "periodic", // boundaries
+        1 // default spin
+    };
+    auto lat = Lattice(spec);
+
+    lat.flip_spin(lat.edge_in_between(0, 8));
+    lat.flip_spin(lat.edge_in_between(1, 9));
+    lat.flip_spin(lat.edge_in_between(2, 10));
+    lat.flip_spin(lat.edge_in_between(3, 11));
+    lat.flip_spin(lat.edge_in_between(11, 12));
+    lat.flip_spin(lat.edge_in_between(12, 20));
+    lat.flip_spin(lat.edge_in_between(13, 21));
+    lat.flip_spin(lat.edge_in_between(13, 14));
+    lat.flip_spin(lat.edge_in_between(6, 14));
+    lat.flip_spin(lat.edge_in_between(7, 15));
+
+    BOOST_CHECK(1 == lat.is_plaquette_percolating());
+}
+
+BOOST_AUTO_TEST_CASE(is_plaquette_percolating_test_2) {
+     LatSpec spec = {
+        'x', // basis
+        "square", // lattice type
+        6, // system size
+        6., // beta
+        "periodic", // boundaries
+        1 // default spin
+    };
+    auto lat = Lattice(spec);
+
+    BOOST_CHECK(0 == lat.is_plaquette_percolating());
+}
+
+BOOST_AUTO_TEST_CASE(is_plaquette_percolating_test_3) {
+     LatSpec spec = {
+        'x', // basis
+        "square", // lattice type
+        8, // system size
+        6., // beta
+        "periodic", // boundaries
+        1 // default spin
+    };
+    auto lat = Lattice(spec);
+
+    lat.flip_spin(lat.edge_in_between(1, 9));
+    lat.flip_spin(lat.edge_in_between(2, 10));
+    lat.flip_spin(lat.edge_in_between(3, 11));
+    lat.flip_spin(lat.edge_in_between(4, 12));
+    lat.flip_spin(lat.edge_in_between(5, 13));
+    lat.flip_spin(lat.edge_in_between(6, 14));
+    lat.flip_spin(lat.edge_in_between(7, 15));
+
+    BOOST_CHECK(1 == lat.is_plaquette_percolating());
+}
+
+BOOST_AUTO_TEST_CASE(is_plaquette_percolating_test_4) {
+     LatSpec spec = {
+        'x', // basis
+        "square", // lattice type
+        6, // system size
+        6., // beta
+        "periodic", // boundaries
+        1 // default spin
+    };
+    auto lat = Lattice(spec);
+
+    lat.flip_spin(lat.edge_in_between(0, 1));
+    lat.flip_spin(lat.edge_in_between(1, 2));
+    lat.flip_spin(lat.edge_in_between(2, 3));
+    lat.flip_spin(lat.edge_in_between(3, 4));
+    lat.flip_spin(lat.edge_in_between(4, 5));
+
+    BOOST_CHECK(0 == lat.is_plaquette_percolating());
+}
+
 BOOST_AUTO_TEST_CASE(is_winding_plaquette_percolating_test_1) {
      LatSpec spec = {
         'x', // basis

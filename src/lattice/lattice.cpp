@@ -3059,8 +3059,20 @@ bool Lattice::is_percolating() {
                 if (target_set.find(v) != target_set.end())
                     return true;
                 for (int neighbor : boost::make_iterator_range(boost::adjacent_vertices(v, g))) {
-                    if (get_spin(edge_in_between(v, neighbor)) == -1 && !discovered[neighbor])
-                        dfs.push(neighbor);
+                    if (get_spin(edge_in_between(v, neighbor)) != -1 || discovered[neighbor])
+                        continue;
+
+                    // Open-style percolation must not traverse periodic seam links.
+                    // On periodic lattices those are exactly start-boundary <-> target-boundary hops.
+                    const int coord_v = get_coord(v, axis);
+                    const int coord_n = get_coord(neighbor, axis);
+                    const bool crosses_seam =
+                        (coord_v == start_bound && coord_n == target_bound) ||
+                        (coord_v == target_bound && coord_n == start_bound);
+                    if (crosses_seam)
+                        continue;
+
+                    dfs.push(neighbor);
                 }
             }
         }
@@ -3256,6 +3268,103 @@ bool Lattice::is_winding_plaquette_percolating() {
     return false;
 }
 
+bool Lattice::is_plaquette_percolating() {
+    int x_left = static_cast<int>(0 * MAX_PLAQUETTE_COORDINATES[0]);
+    int x_right = static_cast<int>(1 * MAX_PLAQUETTE_COORDINATES[0]);
+
+    int y_top = static_cast<int>(0 * MAX_PLAQUETTE_COORDINATES[1]);
+    int y_bottom = static_cast<int>(1 * MAX_PLAQUETTE_COORDINATES[1]);
+
+    int z_shallow{}, z_deep{};
+    if (LATTICE_DIMENSIONALITY == 3) {
+        z_shallow = static_cast<int>(0 * MAX_PLAQUETTE_COORDINATES[2]);
+        z_deep = static_cast<int>(1 * MAX_PLAQUETTE_COORDINATES[2]);
+    }
+
+    // Build a list of all plaquette indices.
+    std::vector<int> ps(get_plaquette_count());
+    std::iota(ps.begin(), ps.end(), 0);
+
+    // Lambda to check percolation along a given axis.
+    // It performs a DFS from plaquettes on the 'start_bound' side and checks
+    // for any connection to plaquettes on the 'target_bound' side through active
+    // links (edges with spin == -1).
+    auto check_direction = [this, &ps](const std::vector<double>& coord_vector, int start_bound, int target_bound) -> bool {
+        std::vector<int> start_plaquettes;
+        std::copy_if(ps.begin(), ps.end(), std::back_inserter(start_plaquettes),
+                     [&](int p) { return static_cast<int>(coord_vector[p]) == start_bound; });
+
+        // Build a set of target plaquettes for fast lookup.
+        std::unordered_set<int> target_set;
+        for (int p : ps) {
+            if (static_cast<int>(coord_vector[p]) == target_bound) {
+                target_set.insert(p);
+            }
+        }
+
+        std::vector<bool> discovered(get_plaquette_count(), false);
+        std::stack<int> dfs;
+        for (int start : start_plaquettes) {
+            if (discovered[start]) {
+                continue;
+            }
+            dfs.push(start);
+            while (!dfs.empty()) {
+                const int cur = dfs.top();
+                dfs.pop();
+
+                if (discovered[cur]) {
+                    continue;
+                }
+                discovered[cur] = true;
+
+                if (target_set.find(cur) != target_set.end()) {
+                    return true;
+                }
+
+                const auto& pedges = get_plaquette_edges(cur);
+                for (auto edg : pedges) {
+                    if (get_spin(edg) == -1) {
+                        for (int p_neighbor : g[edg].part_of_plaquette_lookup) {
+                            if (p_neighbor == cur || discovered[p_neighbor]) {
+                                continue;
+                            }
+
+                            // Open-style percolation must not traverse periodic seam links.
+                            // On periodic lattices those are exactly start-boundary <-> target-boundary hops.
+                            const int cur_coord = static_cast<int>(coord_vector[cur]);
+                            const int neighbor_coord = static_cast<int>(coord_vector[p_neighbor]);
+                            const bool crosses_seam =
+                                (cur_coord == start_bound && neighbor_coord == target_bound) ||
+                                (cur_coord == target_bound && neighbor_coord == start_bound);
+                            if (crosses_seam) {
+                                continue;
+                            }
+
+                            if (!discovered[p_neighbor]) {
+                                dfs.push(p_neighbor);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
+    if (check_direction(plaquette_x_vector, x_left, x_right)) {
+        return true;
+    }
+    if (check_direction(plaquette_y_vector, y_top, y_bottom)) {
+        return true;
+    }
+    if (LATTICE_DIMENSIONALITY == 3 && check_direction(plaquette_z_vector, z_shallow, z_deep)) {
+        return true;
+    }
+
+    return false;
+}
+
 int Lattice::largest_plaquette_cluster() {
     const size_t P = static_cast<size_t>(get_plaquette_count());
     if (P == 0) return 0;
@@ -3387,8 +3496,7 @@ double Lattice::plaquette_percolation_strength() {
     if (BOUNDARIES == "periodic") {
         percolating = is_winding_plaquette_percolating();
     } else {
-        //TODO
-        percolating = 0;
+        percolating = is_plaquette_percolating();
     }
 
     if (percolating) {
@@ -3402,8 +3510,7 @@ double Lattice::plaquette_percolation_probability() {
     if (BOUNDARIES == "periodic") {
         return is_winding_plaquette_percolating();
     } else {
-        //TODO
-        return -1.;
+        return is_plaquette_percolating();
     }
 }
 
