@@ -1094,10 +1094,13 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_edge(
     for (size_t i = 0; i < tuple_edges.size(); ++i) {
         const auto edg = tuple_edges[i];
 
-        // .second irrelevant right now but could be of use in other implementations of the algorithm
-        std::vector<std::pair<double,int>> spin_flip_lookup { {imag_time_tuple_flip, 1}, {imag_time_spin_flips[i], 0} };
-        std::sort(spin_flip_lookup.begin(), spin_flip_lookup.end());
-        double bare_energy_edg = lat.integrated_edge_energy_diff_combination(edg, tau_left, tau_right, spin_flip_lookup);
+        double bare_energy_edg = lat.integrated_edge_energy_diff_combination(
+            edg,
+            tau_left,
+            tau_right,
+            imag_time_tuple_flip,
+            imag_time_spin_flips[i]
+        );
         bare_energy_single_vector.emplace_back(bare_energy_edg);
         if constexpr (Basis == 'x') {
             energy_single_diff += -h * bare_energy_edg;
