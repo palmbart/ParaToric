@@ -3007,6 +3007,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     
     // Vector to store observable results for all snapshots
     std::vector<std::vector< std::variant< std::complex<double>, double> >> observable_vector;
+    std::vector<double> acc_ratio_vector;
     std::vector<double> observable_mean_vector(config.sim_spec.observables.size(), 0.), 
                         observable_std_vector(config.sim_spec.observables.size(), 0.), 
                         binder_mean_vector(config.sim_spec.observables.size(), 0.), 
@@ -3102,6 +3103,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, config.param_spec.h, 
                 config.param_spec.mu, config.param_spec.J, config.param_spec.lmbda
             );
+            acc_ratio_vector.emplace_back(acc_ratio);
             if (total_metropolis_step_count % reset_potential_energy_count == 0) {
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();
@@ -3258,6 +3260,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
 
     return Result{
         .series=observable_vector, 
+        .acc_ratio=acc_ratio_vector,
         .mean=observable_mean_vector, 
         .mean_std=observable_std_vector, 
         .binder=binder_mean_vector, 
