@@ -1176,8 +1176,12 @@ private:
 
     // p -> edges of plaquette p (arbitrary length: 3/4/6/…)
     std::vector<std::vector<Edge>> plaquette_edges_cache_;
+    // p -> unique star centers touched by plaquette p
+    std::vector<std::vector<int>> plaquette_vertices_cache_;
     // v -> incident edges (star at vertex v)
     std::vector<std::vector<Edge>> star_edges_cache_;
+    // v -> unique plaquettes touching star v
+    std::vector<std::vector<int>> star_plaquettes_cache_;
     // Edge descriptors
     std::vector<Edge> egde_cache_;
 

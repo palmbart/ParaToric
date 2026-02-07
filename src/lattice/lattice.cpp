@@ -1766,12 +1766,17 @@ void Lattice::build_caches_() {
     // ----- 1) Plaquette -> edges (arbitrary length) -----
     plaquette_edges_cache_.clear();
     plaquette_edges_cache_.resize(plaquette_vector.size());
+    plaquette_vertices_cache_.clear();
+    plaquette_vertices_cache_.resize(plaquette_vector.size());
 
     for (size_t p = 0; p < plaquette_vector.size(); ++p) {
         const auto vpairs = get_plaquette_vertex_pairs(static_cast<int>(p));
         auto& pedges = plaquette_edges_cache_[p];
+        auto& pverts = plaquette_vertices_cache_[p];
         pedges.clear();
         pedges.reserve(vpairs.size());
+        pverts.clear();
+        pverts.reserve(vpairs.size() * 2);
 
         for (const auto& pr : vpairs) {
             auto uv = boost::edge(pr.first, pr.second, g);
@@ -1784,8 +1789,13 @@ void Lattice::build_caches_() {
                 throw std::runtime_error("build_caches_: missing edge between plaquette vertices");
             }
             pedges.emplace_back(uv.first);
+            pverts.emplace_back(pr.first);
+            pverts.emplace_back(pr.second);
             g[uv.first].part_of_plaquette_lookup.emplace_back(static_cast<int>(p));
         }
+
+        std::sort(pverts.begin(), pverts.end());
+        pverts.erase(std::unique(pverts.begin(), pverts.end()), pverts.end());
     }
 
     // ----- 2) Star (vertex) -> incident edges (use vertex_index map!) -----
@@ -1804,6 +1814,20 @@ void Lattice::build_caches_() {
         for (auto e : boost::make_iterator_range(boost::out_edges(v, g))) {
             lst.emplace_back(e);
         }
+    }
+
+    // ----- 3) Star (vertex) -> unique touching plaquettes -----
+    star_plaquettes_cache_.clear();
+    star_plaquettes_cache_.resize(V);
+    for (size_t v = 0; v < V; ++v) {
+        auto& plist = star_plaquettes_cache_[v];
+        plist.clear();
+        for (const auto& e : star_edges_cache_[v]) {
+            const auto& p_lookup = g[e].part_of_plaquette_lookup;
+            plist.insert(plist.end(), p_lookup.begin(), p_lookup.end());
+        }
+        std::sort(plist.begin(), plist.end());
+        plist.erase(std::unique(plist.begin(), plist.end()), plist.end());
     }
 }
 
@@ -2509,14 +2533,6 @@ double Lattice::total_integrated_plaquette_energy() {
 }
 
 namespace {
-    // Linear search (K ≤ 6). Returns -1 if not found.
-    inline int index_in_span(std::span<const paratoric::Lattice::Edge> s,
-                             const paratoric::Lattice::Edge& e) noexcept {
-        for (size_t i = 0; i < s.size(); ++i)
-            if (s[i] == e) return static_cast<int>(i);
-        return -1;
-    }
-
     // Insert (t, tag) into sorted-by-time vector with linear insertion (m tiny)
     inline void insert_sorted_by_time(std::vector<std::pair<double,int>>& v,
                                       double t, int tag) {
@@ -2541,46 +2557,45 @@ Lattice::integrated_star_energy_diff_combination(
     } 
 
     const auto plaquette_edges = get_plaquette_edges(plaquette_index);
+    const auto& cached_vertices = plaquette_vertices_cache_[static_cast<size_t>(plaquette_index)];
 
-    std::vector<int> unique_vertices;
-    unique_vertices.reserve(plaquette_edges.size() * 2); // each edge contributes up to 2 vertices
+    std::vector<int> star_centers;
+    star_centers.assign(cached_vertices.begin(), cached_vertices.end());
     std::vector<double> star_potential_energy_diffs;
+    star_potential_energy_diffs.reserve(star_centers.size());
 
-    for (const auto& edg : plaquette_edges) {
-        auto [source_v, target_v] = vertices_of_edge(edg);
-        unique_vertices.emplace_back(source_v);
-        unique_vertices.emplace_back(target_v);
+    thread_local std::vector<std::pair<int,int>> edge_vertices;
+    edge_vertices.clear();
+    edge_vertices.reserve(plaquette_edges.size());
+    for (const auto& e : plaquette_edges) {
+        edge_vertices.emplace_back(vertices_of_edge(e));
     }
 
-    std::sort(unique_vertices.begin(), unique_vertices.end());
-    unique_vertices.erase(std::unique(
-        unique_vertices.begin(), 
-        unique_vertices.end()), 
-        unique_vertices.end()
-    );
-
     double energy = 0.;
-    std::vector<std::pair<double,int>> local_spin_flips;
-    for (const auto& v : unique_vertices) {
-        const auto& star_edges = get_star_edges(v);
+    thread_local std::vector<std::pair<double,int>> local_spin_flips;
+    local_spin_flips.clear();
+    local_spin_flips.reserve(1 + plaquette_edges.size());
+
+    for (const auto& v : star_centers) {
+        const auto star_edges = get_star_edges(v);
         local_spin_flips.clear();
         insert_sorted_by_time(local_spin_flips, imag_time_tuple_flip, 1);
 
-        // Add singles that lie on edges shared with the plaquette
-        for (const auto& e : star_edges) {
-            auto it = std::find(plaquette_edges.begin(), plaquette_edges.end(), e);
-            if (it != plaquette_edges.end()) {
-                const size_t idx = static_cast<size_t>(std::distance(plaquette_edges.begin(), it));
+        // Singles are only on plaquette edges incident to this star center.
+        for (size_t idx = 0; idx < edge_vertices.size(); ++idx) {
+            const auto& [source_v, target_v] = edge_vertices[idx];
+            if (source_v == v || target_v == v) {
                 insert_sorted_by_time(local_spin_flips, spin_flip_lookup[idx], 0);
             }
         }
+
         double energy_v = integrated_tuple_energy_diff_combination(
             star_edges, imag_time_1, imag_time_2, local_spin_flips
         );
         star_potential_energy_diffs.emplace_back(energy_v);
         energy += energy_v;
     }
-    return {energy, std::move(unique_vertices), std::move(star_potential_energy_diffs)};
+    return {energy, std::move(star_centers), std::move(star_potential_energy_diffs)};
 }
 
 [[gnu::hot]]
@@ -2598,15 +2613,9 @@ Lattice::integrated_plaquette_energy_diff_combination(
     }
 
     const auto star_edges = get_star_edges(star_index);
+    const auto& cached_plaquettes = star_plaquettes_cache_[static_cast<size_t>(star_index)];
     std::vector<int> unique_plaquettes;
-
-    for (const auto& edg : star_edges) {
-        const auto& part_of_plaquette_lookup = g[edg].part_of_plaquette_lookup;
-        unique_plaquettes.insert(unique_plaquettes.end(), part_of_plaquette_lookup.begin(), part_of_plaquette_lookup.end());
-    }
-
-    std::sort(unique_plaquettes.begin(), unique_plaquettes.end());
-    unique_plaquettes.erase(std::unique(unique_plaquettes.begin(), unique_plaquettes.end()), unique_plaquettes.end());
+    unique_plaquettes.assign(cached_plaquettes.begin(), cached_plaquettes.end());
 
     thread_local std::vector<std::pair<double,int>> flips;
     flips.reserve(8);
@@ -2621,11 +2630,11 @@ Lattice::integrated_plaquette_energy_diff_combination(
         flips.clear();
         insert_sorted_by_time(flips, imag_time_tuple_flip, 1);
 
-        // Add singles on edges that are shared with the star
-        for (const auto& pe : plaq) {
-            const int idx = index_in_span(star_edges, pe);
-            if (idx >= 0) {
-                insert_sorted_by_time(flips, spin_flip_lookup[static_cast<size_t>(idx)], 0);
+        // Add singles on star-edges that belong to this plaquette.
+        for (size_t i = 0; i < star_edges.size(); ++i) {
+            const auto& p_lookup = g[star_edges[i]].part_of_plaquette_lookup;
+            if (std::find(p_lookup.begin(), p_lookup.end(), p_index) != p_lookup.end()) {
+                insert_sorted_by_time(flips, spin_flip_lookup[i], 0);
             }
         }
 
