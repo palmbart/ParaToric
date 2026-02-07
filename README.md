@@ -101,7 +101,7 @@ This simulation type runs `T_steps` individual Markov chains for evenly spaced t
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_T_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -Tl 0.1 -Tu 10 -Ts 15 -hc 0.5 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_T_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -Tl 0.1 -Tu 10 -Ts 15 -hc 0.5 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_static_susceptibility sigma_x_dynamical_susceptibility sigma_z_static_susceptibility sigma_z_dynamical_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -120,7 +120,7 @@ This simulation type runs `h_steps` individual Markov chains for evenly spaced f
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_h_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -hl 0.0 -hu 0.5 -hs 15 -T 0.1 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability plaquette_percolation_strength largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory
+$ python3 ./python/cli/paratoric.py -sim etc_h_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -hl 0.0 -hu 0.5 -hs 15 -T 0.1 -Jc 1 -lmbdac 0.2 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability plaquette_percolation_strength largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_static_susceptibility sigma_x_dynamical_susceptibility sigma_z_static_susceptibility sigma_z_dynamical_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory
 ```
 
 **Specific Python Command line options**
@@ -139,7 +139,7 @@ This simulation type runs `lmbda_steps` individual Markov chains for evenly spac
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Nbs 12000 -Ns 1000 -muc 1 -Nth 100000 -lmbdal 0.1 -lmbdau 0.7 -lmbdas 15 -T 0.1 -hc 0.1 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability plaquette_percolation_strength largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas z -lat honeycomb -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Nbs 12000 -Ns 1000 -muc 1 -Nth 100000 -lmbdal 0.1 -lmbdau 0.7 -lmbdas 15 -T 0.1 -hc 0.1 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_probability plaquette_percolation_strength largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_static_susceptibility sigma_x_dynamical_susceptibility sigma_z_static_susceptibility sigma_z_dynamical_susceptibility -bas z -lat honeycomb -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -158,7 +158,7 @@ This simulation type runs `Theta_steps` individual Markov chains on a circle in 
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -lmbdac 0.0 -rad 1.0 -Thl 0 -Thu 1.57 -Ths 30 -T 0.1 -hc 0.0 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_circle_sweep -Nbs 8000 -Ns 1000 -muc 1 -Nth 50000 -lmbdac 0.0 -rad 1.0 -Thl 0 -Thu 1.57 -Ths 30 -T 0.1 -hc 0.0 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_static_susceptibility sigma_x_dynamical_susceptibility sigma_z_static_susceptibility sigma_z_dynamical_susceptibility -bas x -lat square -L 6 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -180,7 +180,7 @@ Uses the hysteresis schedule specified in `h_hysteresis` and `lmbda_hysteresis`;
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_hysteresis -Nbs 5000 -Ns 1000 -muc 1 -Nth 50000 -hhys 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 -T 0.1 -Jc 1 -lmbdahys 0 0 0 0 0 0 0 0 0 0 0 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat cubic -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_hysteresis -Nbs 5000 -Ns 1000 -muc 1 -Nth 50000 -hhys 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 -T 0.1 -Jc 1 -lmbdahys 0 0 0 0 0 0 0 0 0 0 0 -Nr 1000 -obs percolation_strength percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_static_susceptibility sigma_x_dynamical_susceptibility sigma_z_static_susceptibility sigma_z_dynamical_susceptibility -bas x -lat cubic -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**
@@ -198,7 +198,7 @@ This simulation type performs the thermalization for `repetitions` individual Ma
 
 An exemplary simulation could look like this:
 ```bash
-$ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 50000 -reps 10 -lmbdac 2 -T 0.1 -hc 0.3 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_susceptibility sigma_z_susceptibility -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
+$ python3 ./python/cli/paratoric.py -sim etc_thermalization -muc 1 -Nth 50000 -reps 10 -lmbdac 2 -T 0.1 -hc 0.3 -Jc 1 -Nr 1000 -obs percolation_strength percolation_probability plaquette_percolation_strength plaquette_percolation_probability largest_cluster largest_plaquette_cluster string_number energy energy_h energy_mu energy_J energy_lmbda sigma_x sigma_z star_x plaquette_z staggered_imaginary_times delta anyon_count anyon_density fredenhagen_marcu sigma_x_static_susceptibility sigma_x_dynamical_susceptibility sigma_z_static_susceptibility sigma_z_dynamical_susceptibility -bas x -lat square -L 4 -bound periodic -dsp 1 -outdir /your/output/directory 
 ```
 
 **Specific Python Command line options**

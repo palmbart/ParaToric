@@ -334,7 +334,7 @@ class ExtendedToricCodeQMC {
         };
 
         std::function<std::complex<double>(Lattice&, double, double, double, double)> 
-        sigma_x_susceptibility_obs 
+        sigma_x_static_susceptibility_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             lat.rotate_imag_time();
             if constexpr (Basis == 'x') return lat.get_diag_M_M(); 
@@ -359,7 +359,7 @@ class ExtendedToricCodeQMC {
         };
 
         std::function<std::complex<double>(Lattice&, double, double, double, double)> 
-        sigma_z_susceptibility_obs 
+        sigma_z_static_susceptibility_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             lat.rotate_imag_time();
             if constexpr (Basis == 'x') return lat.get_non_diag_M_M(); 
@@ -444,11 +444,11 @@ class ExtendedToricCodeQMC {
             {"plaquette_percolation_strength", "real", plaquette_percolation_strength_obs},
             {"plaquette_z", "real", plaquette_z_obs},
             {"sigma_x", "real", sigma_x_obs},
-            {"sigma_x_susceptibility", "susceptibility", sigma_x_susceptibility_obs},
+            {"sigma_x_static_susceptibility", "susceptibility", sigma_x_static_susceptibility_obs},
             // TODO fix
             {"sigma_x_dynamical_susceptibility", "susceptibility", sigma_x_dynamical_susceptibility_obs},
             {"sigma_z", "real", sigma_z_obs},
-            {"sigma_z_susceptibility", "susceptibility", sigma_z_susceptibility_obs},
+            {"sigma_z_static_susceptibility", "susceptibility", sigma_z_static_susceptibility_obs},
             // TODO fix
             {"sigma_z_dynamical_susceptibility", "susceptibility", sigma_z_dynamical_susceptibility_obs},
             {"staggered_imaginary_times", "real", staggered_imaginary_times_obs},
@@ -3199,7 +3199,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 }
             }
             //TODO fix this, every observable should just define their susceptibility function
-            if ((config.sim_spec.observables[k] == "sigma_z_susceptibility" && Basis == 'x')) {
+            if ((config.sim_spec.observables[k] == "sigma_z_static_susceptibility" && Basis == 'x')) {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                 = paratoric::statistics::bootstrap_offdiag_susceptibility(
                     obs_real, config.lat_spec.beta, config.param_spec.lmbda, 
@@ -3211,7 +3211,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
                 = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
-            } else if (config.sim_spec.observables[k] == "sigma_x_susceptibility" && Basis == 'z') {
+            } else if (config.sim_spec.observables[k] == "sigma_x_static_susceptibility" && Basis == 'z') {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                 = paratoric::statistics::bootstrap_offdiag_susceptibility(
                     obs_real, config.lat_spec.beta, config.param_spec.h, 
@@ -3510,7 +3510,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     }
                 }
 
-                if ((config.sim_spec.observables[k] == "sigma_z_susceptibility" && Basis == 'x')) {
+                if ((config.sim_spec.observables[k] == "sigma_z_static_susceptibility" && Basis == 'x')) {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::bootstrap_offdiag_susceptibility(
                         obs_real, config.lat_spec.beta, lmbda, 
@@ -3522,7 +3522,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     binder_std_vector[k] = binder_std;
                     observable_autocorrelation_time_vector[k] 
                     = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
-                } else if (config.sim_spec.observables[k] == "sigma_x_susceptibility" && Basis == 'z') {
+                } else if (config.sim_spec.observables[k] == "sigma_x_static_susceptibility" && Basis == 'z') {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::bootstrap_offdiag_susceptibility(
                         obs_real, config.lat_spec.beta, h, 

@@ -70,7 +70,8 @@ BOOST_AUTO_TEST_CASE(get_thermalization_test_1) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -109,7 +110,8 @@ BOOST_AUTO_TEST_CASE(get_thermalization_test_2) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -148,7 +150,8 @@ BOOST_AUTO_TEST_CASE(get_thermalization_test_3) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -192,7 +195,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_1) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -236,7 +240,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_2) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -280,7 +285,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_3) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -324,7 +330,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_4) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -368,7 +375,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_5) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -412,7 +420,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_6) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -456,7 +465,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_7) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -500,7 +510,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_8) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -544,7 +555,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_9) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     }; 
     OutSpec out_spec = {
@@ -589,7 +601,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_10) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     }; 
     OutSpec out_spec = {
@@ -634,7 +647,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_11) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -678,7 +692,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_12) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -722,7 +737,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_13) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -766,7 +782,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_14) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -810,7 +827,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_15) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -854,7 +872,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_16) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -895,7 +914,8 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_1) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -936,7 +956,8 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_2) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -977,7 +998,8 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_3) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
@@ -1018,7 +1040,8 @@ BOOST_AUTO_TEST_CASE(get_hysteresis_test_4) {
             "string_number", "energy", "energy_h", "energy_mu", "energy_J", "energy_lmbda", 
             "sigma_x", "sigma_z", "star_x", "plaquette_z", "staggered_imaginary_times", 
             "delta", "anyon_count", "anyon_density", "fredenhagen_marcu", 
-            "sigma_x_susceptibility", "sigma_z_susceptibility"
+            "sigma_x_static_susceptibility", "sigma_x_dynamical_susceptibility",
+            "sigma_z_static_susceptibility", "sigma_z_dynamical_susceptibility"
         }
     };
     OutSpec out_spec = {
