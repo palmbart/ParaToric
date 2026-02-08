@@ -381,7 +381,7 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
     const double meank_raw  = sumk_raw  / N;
     const double meank2_raw = sumk2_raw / N;
     const double varK_raw   = meank2_raw - meank_raw * meank_raw;
-    const double chi_hat    = (varK_raw - meank_raw) / (beta * Nsites * h * h);
+    const double chi_hat    = (varK_raw - meank_raw) / (beta * Nsites * Nsites * h * h);
 
     for (size_t it = 0; it < n_iter; ++it) {
         auto idx = stationary_bootstrap(kvec, blk_len, N, rng);
@@ -405,7 +405,7 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
         // Moments  
         const double varK = (meank2 - meank * meank);
         // Convert to intensive susceptibility per site:
-        const double chi = (varK - meank) / (beta * Nsites * h * h);
+        const double chi = (varK - meank) / (beta * Nsites * Nsites * h * h);
 
         chi_samples.push_back(chi);
         // TODO
@@ -457,7 +457,7 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_dynamical_susce
     const double meanL_raw  = sumL_raw  / N;
     const double meanR_raw  = sumR_raw  / N;
     const double meanLR_raw = sumLR_raw / N;
-    const double cov_hat    = (meanLR_raw - meanL_raw * meanR_raw) / Nsites;
+    const double cov_hat    = (meanLR_raw - meanL_raw * meanR_raw) / Nsites / Nsites;
     double e2_raw = sumLR2_raw / N;
     double e4_raw = sumLR4_raw / N;
     if (e2_raw == 0.0) { e2_raw = 1e-12; e4_raw = 0.0; }
@@ -489,7 +489,7 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_dynamical_susce
         const double meanL  = sumL  / N;
         const double meanR  = sumR  / N;
         const double meanLR = sumLR / N;
-        const double covLR  = (meanLR - meanL * meanR) / Nsites;
+        const double covLR  = (meanLR - meanL * meanR) / Nsites / Nsites;
 
         cov_samples.push_back(covLR);
 
