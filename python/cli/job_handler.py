@@ -1107,7 +1107,7 @@ class JobHandler:
         ax.grid(color='silver', linestyle='-', alpha=0.3)
         ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
         ax.set(yscale='log')
-        ax.set(xlabel='Monte Carlo step')
+        ax.set(xlabel='Monte Carlo update')
         ax.set(ylabel='Monte Carlo acceptance ratios')
 
         fig.tight_layout()
@@ -1125,7 +1125,7 @@ class JobHandler:
                     ax.plot(step_array, obs_array[i].real, color='firebrick')
                     ax.grid(color='silver', linestyle='-', alpha=0.3)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
-                    ax.set(xlabel='Monte Carlo step')
+                    ax.set(xlabel='Monte Carlo update')
                     ax.set(ylabel=output_str)
 
                     fig.tight_layout()
@@ -1145,7 +1145,7 @@ class JobHandler:
                     ax1.grid(color='silver', linestyle='-', alpha=0.3)
                     ax1.plot(step_array, acc_ratio_array, color='navy')
 
-                    ax2.set(xlabel='Monte Carlo step')
+                    ax2.set(xlabel='Monte Carlo update')
                     ax2.set(ylabel=output_str)
                     ax2.grid(color='silver', linestyle='-', alpha=0.3)
                     ax2.plot(step_array, obs_array[i].real, color='firebrick')
@@ -1164,7 +1164,7 @@ class JobHandler:
                     ax.plot(step_array, obs_array[i].real, color='firebrick')
                     ax.grid(color='silver', linestyle='-', alpha=0.3)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
-                    ax.set(xlabel='Monte Carlo step')
+                    ax.set(xlabel='Monte Carlo update')
                     ax.set(ylabel=output_str+'_real')
 
                     fig.tight_layout()
@@ -1184,7 +1184,7 @@ class JobHandler:
                     ax1.grid(color='silver', linestyle='-', alpha=0.3)
                     ax1.plot(step_array, acc_ratio_array, color='navy')
 
-                    ax2.set(xlabel='Monte Carlo step')
+                    ax2.set(xlabel='Monte Carlo update')
                     ax2.set(ylabel=output_str+'_real')
                     ax2.grid(color='silver', linestyle='-', alpha=0.3)
                     ax2.plot(step_array, obs_array[i].real, color='firebrick')
@@ -1201,7 +1201,7 @@ class JobHandler:
                     ax.plot(step_array, obs_array[i].imag, color='firebrick')
                     ax.grid(color='silver', linestyle='-', alpha=0.3)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
-                    ax.set(xlabel='Monte Carlo step')
+                    ax.set(xlabel='Monte Carlo update')
                     ax.set(ylabel=output_str+'_imag')
 
                     fig.tight_layout()
@@ -1221,7 +1221,7 @@ class JobHandler:
                     ax1.grid(color='silver', linestyle='-', alpha=0.3)
                     ax1.plot(step_array, acc_ratio_array, color='navy')
 
-                    ax2.set(xlabel='Monte Carlo step')
+                    ax2.set(xlabel='Monte Carlo update')
                     ax2.set(ylabel=output_str+'_imag')
                     ax2.grid(color='silver', linestyle='-', alpha=0.3)
                     ax2.plot(step_array, obs_array[i].imag, color='firebrick')
