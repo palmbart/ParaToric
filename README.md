@@ -78,7 +78,7 @@ A [Jupyter notebook](scripts/bash_creator.ipynb) for creating [SLURM][2] jobscri
 | `--lmbda_constant_therm`     | `-lmbdact`| Thermalization value of $`\lambda`$                                                |
 | `--output_directory`         | `-outdir` | Output directory                                                                   |
 | `--snapshots`                | `-snap`   | Whether snapshots should be saved to output directory (`0` or `1`)                 |
-| `--full_time_series`         | `-fts`    | Whether full counting statistics should be saved to output directory (`0` or `1`)  |
+| `--full_time_series`         | `-fts`    | Whether full time series should be saved to output directory (`0` or `1`)          |
 | `--processes`                | `-proc`   | Number of (logical) CPU cores for Python multiprocessing                           |
 
 **Lattice specific Python command line options**
