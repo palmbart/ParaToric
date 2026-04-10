@@ -22,7 +22,7 @@ Contents
   - [$`T`$-sweep](#T-sweep)
   - [h-sweep](#h-sweep)
   - [$`\lambda`$-sweep](#lambda-sweep)
-  - [$`\circ`$-sweep](#circ-sweep)
+  - [circle-sweep](#circle-sweep)
   - [Hysteresis-sweep](#hysteresis-sweep)
   - [Thermalization](#thermalization)
 * [Acknowledgements](#acknowledgements)
@@ -152,7 +152,7 @@ $ python3 ./python/cli/paratoric.py -sim etc_lmbda_sweep -Nbs 12000 -Ns 1000 -mu
 | `--lmbda_upper`     | `-lmbdau`  | Upper bound of field $`\lambda`$                                    |
 | `--lmbda_steps`     | `-lmbdas`  | Number of field steps between lower and upper bound                 |
 
-### $`\circ`$-sweep
+### circle-sweep
 
 This simulation type runs `Theta_steps` individual Markov chains on a circle in $`\lambda-h`$ space with center `(lmbda_constant, h_constant)`and radius `radius` for evenly spaced angles in the interval `Theta_lower` $`\leq \Theta \leq`$ `Theta_upper`. Angles are measured anti-clockwise relative to the $`\lambda`$-axis. It calculates and plots `observables` for all angles. As this task is trivial to parallelize, we advise matching `processes` = `Theta_steps` as closely as possible for optimal runtime.
 
