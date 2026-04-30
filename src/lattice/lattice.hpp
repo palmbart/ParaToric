@@ -6,6 +6,7 @@
 #include "paratoric/types/types.hpp"
 #include "rng/rng.hpp"
 
+#include <boost/container/small_vector.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
 #include <concepts>
@@ -83,6 +84,8 @@ public:
     using VertexPair = std::pair<int, int>; // TODO use vertex descriptor instead of int
     using Vertex = boost::graph_traits<LatticeGraph>::vertex_descriptor;
     using Edge = boost::graph_traits<LatticeGraph>::edge_descriptor;
+    using SmallIndexVector = boost::container::small_vector<int, 8>;
+    using SmallEnergyVector = boost::container::small_vector<double, 8>;
     
     /**
      * @brief Create data structure for storing and modifying a lattice for continuous QMC of any graph geometry.
@@ -682,7 +685,7 @@ public:
      * @note “Bare” means no coupling strength factors are applied here.
      *       Apply couplings externally when forming acceptance ratios or totals.
      */
-    std::tuple<double, std::vector<int>, std::vector<double>> 
+    std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_star_energy_diff(
         const Edge& edg, double imag_time_1, double imag_time_2, bool total_cache
     );
@@ -717,7 +720,7 @@ public:
      * @note The two output vectors have the same length: the plaquette coordination of @p edg
      *       (typically 2 in 2D). Their order matches @c g[edg].part_of_plaquette_lookup.
      */
-    std::tuple<double, std::vector<int>, std::vector<double>> 
+    std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_plaquette_energy_diff(
         const Edge& edg, double imag_time_1, double imag_time_2, bool total_cache
     );
@@ -781,7 +784,7 @@ public:
      * @note The vertex list is deduplicated and sorted; the per-star values are
      *       aligned with that list one-to-one.
      */
-    std::tuple<double, std::vector<int>, std::vector<double>> 
+    std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_star_energy_diff_combination(
         int plaquette_index, 
         double imag_time_1, 
@@ -830,7 +833,7 @@ public:
      * @note The plaquette list is deduplicated and sorted; per-plaquette values
      *       align one-to-one with that list.
      */
-    std::tuple<double, std::vector<int>, std::vector<double>> 
+    std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_plaquette_energy_diff_combination(
         int star_index, 
         double imag_time_1, 

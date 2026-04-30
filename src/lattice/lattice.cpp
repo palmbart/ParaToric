@@ -2097,6 +2097,7 @@ double Lattice::flip_next_imag_time(const Edge& edg, double tau) { // TODO repla
 
 std::vector<double> Lattice::flip_next_imag_times_tuple(std::span<const Edge> tuple_edges, double tau) {
     std::vector<double> imag_times;
+    imag_times.reserve(tuple_edges.size());
     for (const Edge& edg : tuple_edges) {
         imag_times.emplace_back(flip_next_imag_time(edg, tau));
     }
@@ -2120,6 +2121,7 @@ double Lattice::flip_prev_imag_time(const Edge& edg, double tau) {
 
 std::vector<double> Lattice::flip_prev_imag_times_tuple(std::span<const Edge> tuple_edges, double tau) {
     std::vector<double> imag_times;
+    imag_times.reserve(tuple_edges.size());
     for (const Edge& edg : tuple_edges) {
         imag_times.emplace_back(flip_prev_imag_time(edg, tau));
     }
@@ -2448,7 +2450,7 @@ double Lattice::integrated_tuple_energy_diff(
     return -2. * integrated_tuple_energy(tuple_edges, imag_time_1, imag_time_2);
 }
 
-std::tuple<double, std::vector<int>, std::vector<double>> 
+std::tuple<double, Lattice::SmallIndexVector, Lattice::SmallEnergyVector> 
 Lattice::integrated_star_energy_diff(
     const Edge& edg, 
     double imag_time_1, 
@@ -2459,8 +2461,8 @@ Lattice::integrated_star_energy_diff(
         throw std::invalid_argument("integrated_star_energy_diff: Time interval has to be non-zero.");
     } 
 
-    std::vector<int> star_centers;
-    std::vector<double> star_potential_energy_diffs;
+    SmallIndexVector star_centers;
+    SmallEnergyVector star_potential_energy_diffs;
 
     auto [source_v, target_v] = vertices_of_edge(edg);
     double energy = 0.;
@@ -2485,7 +2487,7 @@ Lattice::integrated_star_energy_diff(
     return {energy, std::move(star_centers), std::move(star_potential_energy_diffs)};
 }
 
-std::tuple<double, std::vector<int>, std::vector<double>> 
+std::tuple<double, Lattice::SmallIndexVector, Lattice::SmallEnergyVector> 
 Lattice::integrated_plaquette_energy_diff(
     const Edge& edg, 
     double imag_time_1, 
@@ -2495,8 +2497,10 @@ Lattice::integrated_plaquette_energy_diff(
     if (imag_time_1 == imag_time_2) [[unlikely]] {
         throw std::invalid_argument("integrated_plaquette_energy_diff: Time interval has to be non-zero.");
     } 
-    std::vector<int> plaquette_indices;
-    std::vector<double> plaquette_potential_energy_diffs;
+    SmallIndexVector plaquette_indices;
+    SmallEnergyVector plaquette_potential_energy_diffs;
+    plaquette_indices.reserve(g[edg].part_of_plaquette_lookup.size());
+    plaquette_potential_energy_diffs.reserve(g[edg].part_of_plaquette_lookup.size());
 
     double energy = 0.;
     for (int p_index : g[edg].part_of_plaquette_lookup ) {
@@ -2544,7 +2548,7 @@ namespace {
 } // anonymous namespace
 
 [[gnu::hot]]
-std::tuple<double, std::vector<int>, std::vector<double>> 
+std::tuple<double, Lattice::SmallIndexVector, Lattice::SmallEnergyVector> 
 Lattice::integrated_star_energy_diff_combination(
     int plaquette_index,
     double imag_time_1,
@@ -2559,9 +2563,9 @@ Lattice::integrated_star_energy_diff_combination(
     const auto plaquette_edges = get_plaquette_edges(plaquette_index);
     const auto& cached_vertices = plaquette_vertices_cache_[static_cast<size_t>(plaquette_index)];
 
-    std::vector<int> star_centers;
+    SmallIndexVector star_centers;
     star_centers.assign(cached_vertices.begin(), cached_vertices.end());
-    std::vector<double> star_potential_energy_diffs;
+    SmallEnergyVector star_potential_energy_diffs;
     star_potential_energy_diffs.reserve(star_centers.size());
 
     thread_local std::vector<std::pair<int,int>> edge_vertices;
@@ -2599,7 +2603,7 @@ Lattice::integrated_star_energy_diff_combination(
 }
 
 [[gnu::hot]]
-std::tuple<double, std::vector<int>, std::vector<double>> 
+std::tuple<double, Lattice::SmallIndexVector, Lattice::SmallEnergyVector> 
 Lattice::integrated_plaquette_energy_diff_combination(
     int star_index,
     double imag_time_1,
@@ -2614,13 +2618,13 @@ Lattice::integrated_plaquette_energy_diff_combination(
 
     const auto star_edges = get_star_edges(star_index);
     const auto& cached_plaquettes = star_plaquettes_cache_[static_cast<size_t>(star_index)];
-    std::vector<int> unique_plaquettes;
+    SmallIndexVector unique_plaquettes;
     unique_plaquettes.assign(cached_plaquettes.begin(), cached_plaquettes.end());
 
     thread_local std::vector<std::pair<double,int>> flips;
     flips.reserve(8);
 
-    std::vector<double> plaquette_potential_energy_diffs;
+    SmallEnergyVector plaquette_potential_energy_diffs;
     plaquette_potential_energy_diffs.reserve(unique_plaquettes.size());
 
     double energy_sum = 0.0;

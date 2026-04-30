@@ -9,6 +9,7 @@
 #include "statistics/autocorrelation.hpp"
 #include "statistics/bootstrap.hpp"
 
+#include <boost/container/small_vector.hpp>
 #include <boost/log/core.hpp> 
 #include <boost/log/expressions.hpp> 
 #include <boost/log/trivial.hpp> 
@@ -40,6 +41,9 @@ requires ValidBasis<Basis>
 class ExtendedToricCodeQMC {
     public:
         using RNG = paratoric::rng::RNG;
+        using SmallIndexVector = Lattice::SmallIndexVector;
+        using SmallEnergyVector = Lattice::SmallEnergyVector;
+        using SmallBoolVector = boost::container::small_vector<bool, 8>;
 
         ExtendedToricCodeQMC(std::shared_ptr<RNG> rng = nullptr) 
         : rng(rng ? std::move(rng) : std::make_shared<RNG>()) {};
@@ -472,6 +476,7 @@ class ExtendedToricCodeQMC {
 
         std::shared_ptr<RNG> rng;
         std::uniform_real_distribution<double> uniform_dist{0., 1.};
+        std::uniform_int_distribution<int> random_mc_update_dist{0, 6};
         static constexpr double PRECISION = std::numeric_limits<double>::epsilon();
 
         /**
@@ -562,7 +567,7 @@ class ExtendedToricCodeQMC {
          * @note Per-tuple values are bare; apply couplings only when forming totals or acceptance ratios.
          *       The order of indices matches the lattice adjacency.
          */
-        static std::tuple<double, std::vector<int>, std::vector<double>> 
+        static std::tuple<double, SmallIndexVector, SmallEnergyVector> 
         integrated_pot_energy_diff_single_spin_flip_tuple(
             Lattice& lat, double h, double mu, double J, double lmbda, 
             const Lattice::Edge& edg, double imag_time_spin_flip, double imag_time_next_spin_flip, 
@@ -608,7 +613,7 @@ class ExtendedToricCodeQMC {
          * @note The second return component mirrors the input edges by value; consider
          *       using a view/reference in hot paths to avoid copies.
          */
-        static std::tuple<double, std::span<const Lattice::Edge>, std::vector<double>> 
+        static std::tuple<double, std::span<const Lattice::Edge>, SmallEnergyVector> 
         integrated_pot_energy_diff_tuple_flip_edge(
             Lattice& lat, double h, double mu, double J, double lmbda, 
             int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
@@ -662,13 +667,13 @@ class ExtendedToricCodeQMC {
          * @note The parameters @p create_vector and @p tuple_destroy are accepted for interface
          *       symmetry but are not currently used in the computation.
          */
-        static std::tuple<double, std::span<const Lattice::Edge>, std::vector<double>> 
+        static std::tuple<double, std::span<const Lattice::Edge>, SmallEnergyVector> 
         integrated_pot_energy_diff_combination_flip_edge(
             Lattice& lat, double h, double mu, double J, double lmbda, 
             int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
-            double imag_time_tuple_flip, const std::vector<double>& imag_time_spin_flips, 
+            double imag_time_tuple_flip, const SmallEnergyVector& imag_time_spin_flips, 
             double tau_left, double tau_right, 
-            const std::vector<bool>& create_vector, bool tuple_destroy
+            const SmallBoolVector& create_vector, bool tuple_destroy
         );
 
         /**
@@ -721,13 +726,13 @@ class ExtendedToricCodeQMC {
          *       Couplings are applied only to the returned scalar @c delta.
          * @note Equal-time flips are combined by parity; their order does not affect the integral.
          */
-        static std::tuple<double, std::vector<int>, std::vector<double>> 
+        static std::tuple<double, SmallIndexVector, SmallEnergyVector> 
         integrated_pot_energy_diff_combination_flip_tuple(
             Lattice& lat, double h, double mu, double J, double lmbda, 
             int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
-            double imag_time_tuple_flip, const std::vector<double>& imag_time_spin_flips, 
+            double imag_time_tuple_flip, const SmallEnergyVector& imag_time_spin_flips, 
             double tau_left, double tau_right, 
-            const std::vector<bool>& create_vector, bool tuple_destroy
+            const SmallBoolVector& create_vector, bool tuple_destroy
         );
 
         /**
@@ -750,8 +755,8 @@ class ExtendedToricCodeQMC {
         static void combination_flip(
             Lattice& lat, double h, double mu, 
             int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
-            double imag_time_tuple_flip, const std::vector<double>& imag_time_spin_flips, 
-            const std::vector<bool>& create_vector, bool tuple_destroy
+            double imag_time_tuple_flip, const SmallEnergyVector& imag_time_spin_flips, 
+            const SmallBoolVector& create_vector, bool tuple_destroy
         );
 
         /**
@@ -1025,7 +1030,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_edge(
 
 template<char Basis>
 requires ValidBasis<Basis>
-std::tuple<double, std::vector<int>, std::vector<double>> 
+std::tuple<double, typename ExtendedToricCodeQMC<Basis>::SmallIndexVector, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
 ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_tuple(
     Lattice& lat, double h, double mu, double J, double lmbda, 
     const Lattice::Edge& edg, double imag_time_spin_flip, double imag_time_next_spin_flip, 
@@ -1045,12 +1050,12 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_tuple(
         //for (double& x : bare_plaquette_potential_energy_diffs) x *= -J;
         return {delta_energy_tuple, std::move(plaquette_indices), std::move(bare_plaquette_potential_energy_diffs)};
     } 
-    return {0., std::vector<int>{}, std::vector<double>{}};
+    return {0., SmallIndexVector{}, SmallEnergyVector{}};
 }
 
 template<char Basis>
 requires ValidBasis<Basis>
-std::tuple<double, std::span<const Lattice::Edge>, std::vector<double>> 
+std::tuple<double, std::span<const Lattice::Edge>, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
 ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     Lattice& lat, double h, double mu, double J, double lmbda, 
     int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
@@ -1060,7 +1065,8 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     UNUSED(mu);
     UNUSED(J);
     double delta_energy_single = 0.;
-    std::vector<double> bare_energy_single_vector;
+    SmallEnergyVector bare_energy_single_vector;
+    bare_energy_single_vector.reserve(tuple_edges.size());
     double bare_energy_edg = 0.;
     for (const Lattice::Edge& edg : tuple_edges) {
         if (total_cache) { 
@@ -1081,16 +1087,17 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
 
 template<char Basis>
 requires ValidBasis<Basis>
-std::tuple<double, std::span<const Lattice::Edge>, std::vector<double>> 
+std::tuple<double, std::span<const Lattice::Edge>, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
 ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_edge(
     Lattice& lat, double h, double mu, double J, double lmbda, 
     int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
-    double imag_time_tuple_flip, const std::vector<double>& imag_time_spin_flips, 
+    double imag_time_tuple_flip, const SmallEnergyVector& imag_time_spin_flips, 
     double tau_left, double tau_right, 
-    const std::vector<bool>& create_vector, bool tuple_destroy
+    const SmallBoolVector& create_vector, bool tuple_destroy
 ) {
     double energy_single_diff = 0.; 
-    std::vector<double> bare_energy_single_vector;
+    SmallEnergyVector bare_energy_single_vector;
+    bare_energy_single_vector.reserve(tuple_edges.size());
     for (size_t i = 0; i < tuple_edges.size(); ++i) {
         const auto edg = tuple_edges[i];
 
@@ -1114,31 +1121,35 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_edge(
 
 template<char Basis>
 requires ValidBasis<Basis>
-std::tuple<double, std::vector<int>, std::vector<double>> 
+std::tuple<double, typename ExtendedToricCodeQMC<Basis>::SmallIndexVector, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
 ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_tuple(
     Lattice& lat, double h, double mu, double J, double lmbda, 
     int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
-    double imag_time_tuple_flip, const std::vector<double>& imag_time_spin_flips, 
+    double imag_time_tuple_flip, const SmallEnergyVector& imag_time_spin_flips, 
     double tau_left, double tau_right, 
-    const std::vector<bool>& create_vector, bool tuple_destroy
+    const SmallBoolVector& create_vector, bool tuple_destroy
 ) {
     double energy_tuple_diff = 0.; 
     if constexpr (Basis == 'x') {
         const auto& [bare_energy, star_centers, bare_star_potential_energy_diffs] 
         = lat.integrated_star_energy_diff_combination(
-            tuple_index, tau_left, tau_right, imag_time_spin_flips, imag_time_tuple_flip
+            tuple_index, tau_left, tau_right, 
+            std::span<const double>(imag_time_spin_flips.data(), imag_time_spin_flips.size()), 
+            imag_time_tuple_flip
         );
         energy_tuple_diff += -mu * bare_energy;
         return {energy_tuple_diff, std::move(star_centers), std::move(bare_star_potential_energy_diffs)};
     }  else if constexpr (Basis == 'z') {
         const auto& [bare_energy, plaquette_indices, bare_plaquette_potential_energy_diffs] = 
         lat.integrated_plaquette_energy_diff_combination(
-            tuple_index, tau_left, tau_right, imag_time_spin_flips, imag_time_tuple_flip
+            tuple_index, tau_left, tau_right, 
+            std::span<const double>(imag_time_spin_flips.data(), imag_time_spin_flips.size()), 
+            imag_time_tuple_flip
         );
         energy_tuple_diff += -J * bare_energy;
         return {energy_tuple_diff, std::move(plaquette_indices), std::move(bare_plaquette_potential_energy_diffs)};
     }
-    return {0., std::vector<int>{}, std::vector<double>{}};
+    return {0., SmallIndexVector{}, SmallEnergyVector{}};
 }
 
 template<char Basis>
@@ -1146,8 +1157,8 @@ requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::combination_flip(
     Lattice& lat, double h, double mu, 
     int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
-    double imag_time_tuple_flip, const std::vector<double>& imag_time_spin_flips, 
-    const std::vector<bool>& create_vector, bool tuple_destroy
+    double imag_time_tuple_flip, const SmallEnergyVector& imag_time_spin_flips, 
+    const SmallBoolVector& create_vector, bool tuple_destroy
 ) {
     UNUSED(h);
     UNUSED(mu);
@@ -1454,8 +1465,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                 double integrated_pot_energy_diff_edge = 0.;
                 double bare_pot_energy_diff_edge = 0.;
                 //double integrated_pot_energy_diff_tuple = 0.;
-                std::vector<int> pot_energy_tuple_indices;
-                std::vector<double> pot_energy_diffs;
+                SmallIndexVector pot_energy_tuple_indices;
+                SmallEnergyVector pot_energy_diffs;
                 if (new_imag_time > imag_time_spin_flip) {
                     std::tie(integrated_pot_energy_diff_edge, bare_pot_energy_diff_edge) 
                     = integrated_pot_energy_diff_single_spin_flip_edge(
@@ -2204,7 +2215,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
             } else {
                 double integrated_pot_energy_diff = 0.;
                 std::span<const Lattice::Edge> pot_energy_edges;
-                std::vector<double> pot_energy_diffs;
+                SmallEnergyVector pot_energy_diffs;
                 if (new_imag_time > imag_time_tuple_flip) {
                     const auto& [integrated_pot_energy_diff_edge, pot_energy_edges_tmp, pot_energy_diffs_tmp] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
@@ -2599,9 +2610,12 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
         }
     }
 
-    std::vector<double> r_b;
-    std::vector<bool> create_vector;
-    std::vector<double> flip_times;
+    SmallEnergyVector r_b;
+    SmallBoolVector create_vector;
+    SmallEnergyVector flip_times;
+    r_b.reserve(tuple_edges.size());
+    create_vector.reserve(tuple_edges.size());
+    flip_times.reserve(tuple_edges.size());
 
     // These variables determine the range in which the potential energy can change (potentially :D)
     double tau_right_potential_energy = tau_right;
@@ -2848,7 +2862,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step(
     Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
     double h, double mu, double J, double lmbda
 ) {
-    std::uniform_int_distribution<int> random_mc_update_dist(0, 6);
     const int rnd = random_mc_update_dist(*rng);
     if (rnd < 1) {
         metropolis_step_double_single_spin_flip(lat, integrated_pot_energy, acc_ratio, beta, h, mu, J, lmbda);
@@ -2905,13 +2918,16 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
 
     if (config.sim_spec.seed != 0) rng->set_seed(config.sim_spec.seed);
 
+    const auto thermalization_count = static_cast<size_t>(std::max(config.sim_spec.N_thermalization, 0));
     std::vector<double> acc_ratio_vector;
+    acc_ratio_vector.reserve(thermalization_count);
     // Vector to store observable results for all snapshots
     std::vector<std::vector<std::variant< std::complex<double>, double>>> observable_vector;
-    std::vector<std::variant< std::complex<double>, double>> obs_temp;
+    observable_vector.reserve(config.sim_spec.observables.size());
     for (const auto& obs_func : config.sim_spec.observables) {
         UNUSED(obs_func);
-        observable_vector.emplace_back( obs_temp );
+        observable_vector.emplace_back();
+        observable_vector.back().reserve(thermalization_count);
     } 
 
     auto obs_func_vec = get_obs_func_vec(config.sim_spec.observables);
@@ -3009,17 +3025,21 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     auto obs_type_vec = get_obs_type_vec(config.sim_spec.observables);
     
     // Vector to store observable results for all snapshots
+    const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
+    const auto between_sample_count = static_cast<size_t>(std::max(config.sim_spec.N_between_samples, 0));
     std::vector<std::vector< std::variant< std::complex<double>, double> >> observable_vector;
     std::vector<double> acc_ratio_vector;
+    observable_vector.reserve(config.sim_spec.observables.size());
+    acc_ratio_vector.reserve(sample_count * between_sample_count);
     std::vector<double> observable_mean_vector(config.sim_spec.observables.size(), 0.), 
                         observable_std_vector(config.sim_spec.observables.size(), 0.), 
                         binder_mean_vector(config.sim_spec.observables.size(), 0.), 
                         binder_std_vector(config.sim_spec.observables.size(), 0.), 
                         observable_autocorrelation_time_vector(config.sim_spec.observables.size(), 0.);
-    std::vector<std::variant< std::complex<double>, double>> obs_temp;
     for (const auto& obs_func : config.sim_spec.observables) {
         UNUSED(obs_func);
-        observable_vector.emplace_back( obs_temp );
+        observable_vector.emplace_back();
+        observable_vector.back().reserve(sample_count);
     } 
 
     // Initialize Lattice
@@ -3357,16 +3377,18 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
 
     for (size_t n = 0; n < std::min( config.param_spec.h_hys.size(), std::min(config.param_spec.lmbda_hys.size(), config.out_spec.paths_out.size()) ); n++) {
         // Vector to store observable results for all snapshots
+        const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
         std::vector<std::vector<std::variant< std::complex<double>, double>>> observable_vector;
+        observable_vector.reserve(config.sim_spec.observables.size());
         std::vector<double> observable_mean_vector(config.sim_spec.observables.size(), 0.), 
                             observable_std_vector(config.sim_spec.observables.size(), 0.), 
                             binder_mean_vector(config.sim_spec.observables.size(), 0.), 
                             binder_std_vector(config.sim_spec.observables.size(), 0.), 
                             observable_autocorrelation_time_vector(config.sim_spec.observables.size(), 0.);
-        std::vector<std::variant< std::complex<double>, double>> obs_temp;
         for (const auto& obs_func : config.sim_spec.observables) {
             UNUSED(obs_func);
-            observable_vector.emplace_back( obs_temp );
+            observable_vector.emplace_back();
+            observable_vector.back().reserve(sample_count);
         } 
         auto path_out = config.out_spec.paths_out [ n ];
         h = config.param_spec.h_hys[ n ];
