@@ -66,9 +66,9 @@ void IO::etc_sample(
     H5::Group results_grp = getOrCreateGroup(sim_grp, "results");
 
     for (size_t i = 0; i < config.sim_spec.observables.size(); ++i) {
-        auto obs_name = config.sim_spec.observables[i];
-        auto obs_type = obs_types[i];
-        auto obs_result_vector = result[i];
+        const auto& obs_name = config.sim_spec.observables[i];
+        const auto& obs_type = obs_types[i];
+        const auto& obs_result_vector = result[i];
 
         H5::Group obs_grp = getOrCreateGroup(results_grp, obs_name);
 
@@ -140,13 +140,13 @@ void IO::etc_hysteresis(
     const auto& hys_autocorrelation_time = result_spec.tau_int_hys;
 
     for (size_t n = 0; n < std::min( config.param_spec.h_hys.size(), std::min(config.param_spec.lmbda_hys.size(), paths_out.size()) ); n++) {
-        auto path_out = paths_out[ n ];
-        auto result = results[ n ];
-        auto obs_means = hys_means[ n ];
-        auto obs_std = hys_means_std[ n ];
-        auto binders_means = hys_binders[ n ];
-        auto binders_std = hys_binders_std[ n ];
-        auto autocorrelation_time = hys_autocorrelation_time[ n ];
+        const auto& path_out = paths_out[ n ];
+        const auto& result = results[ n ];
+        const auto& obs_means = hys_means[ n ];
+        const auto& obs_std = hys_means_std[ n ];
+        const auto& binders_means = hys_binders[ n ];
+        const auto& binders_std = hys_binders_std[ n ];
+        const auto& autocorrelation_time = hys_autocorrelation_time[ n ];
 
         std::filesystem::path hdf5_name("obs.h5");
         std::filesystem::path hdf5_path_out = path_out / hdf5_name;
@@ -157,9 +157,9 @@ void IO::etc_hysteresis(
         H5::Group results_grp = getOrCreateGroup(sim_grp, "results");
 
         for (size_t i = 0; i < config.sim_spec.observables.size(); ++i) {
-            auto obs_name = config.sim_spec.observables[i];
-            auto obs_type = obs_types[i];
-            auto obs_result_vector = result[i];
+            const auto& obs_name = config.sim_spec.observables[i];
+            const auto& obs_type = obs_types[i];
+            const auto& obs_result_vector = result[i];
 
             H5::Group obs_grp = getOrCreateGroup(results_grp, obs_name);
 
@@ -238,9 +238,9 @@ void IO::etc_thermalization(
     H5::Group results_grp = getOrCreateGroup(sim_grp, "results");
 
     for (size_t i = 0; i < config.sim_spec.observables.size(); ++i) {
-        auto obs_name = config.sim_spec.observables[i];
-        auto obs_type = obs_types[i];
-        auto obs_result_vector = obs_result[i];
+        const auto& obs_name = config.sim_spec.observables[i];
+        const auto& obs_type = obs_types[i];
+        const auto& obs_result_vector = obs_result[i];
 
         H5::Group obs_grp = getOrCreateGroup(results_grp, obs_name);
 

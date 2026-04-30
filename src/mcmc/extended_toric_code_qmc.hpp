@@ -2969,7 +2969,10 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
         lat.write_graph("snapshots", config.out_spec.path_out);
     }
 
-    return Result{.series=observable_vector, .acc_ratio=acc_ratio_vector};                                     
+    return Result{
+        .series=std::move(observable_vector), 
+        .acc_ratio=std::move(acc_ratio_vector)
+    };                                     
 }
 
 template<char Basis>
@@ -3259,13 +3262,13 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     }
 
     return Result{
-        .series=observable_vector, 
-        .acc_ratio=acc_ratio_vector,
-        .mean=observable_mean_vector, 
-        .mean_std=observable_std_vector, 
-        .binder=binder_mean_vector, 
-        .binder_std=binder_std_vector, 
-        .tau_int=observable_autocorrelation_time_vector
+        .series=std::move(observable_vector), 
+        .acc_ratio=std::move(acc_ratio_vector),
+        .mean=std::move(observable_mean_vector), 
+        .mean_std=std::move(observable_std_vector), 
+        .binder=std::move(binder_mean_vector), 
+        .binder_std=std::move(binder_std_vector), 
+        .tau_int=std::move(observable_autocorrelation_time_vector)
     };                                       
 }
 
@@ -3434,8 +3437,6 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 lat.update_spin_string();
         }
 
-        hys_vector.emplace_back( observable_vector );
-
         if (config.out_spec.save_snapshots) {
             lat.write_graph("snapshots", config.out_spec.path_out);
         }
@@ -3561,11 +3562,12 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
             } 
         }
 
-        hys_mean.emplace_back(observable_mean_vector);
-        hys_mean_std.emplace_back(observable_std_vector);
-        hys_binder.emplace_back(binder_mean_vector);
-        hys_binder_std.emplace_back(binder_std_vector);
-        hys_autocorrelation_time.emplace_back(observable_autocorrelation_time_vector);
+        hys_vector.emplace_back( std::move(observable_vector) );
+        hys_mean.emplace_back(std::move(observable_mean_vector));
+        hys_mean_std.emplace_back(std::move(observable_std_vector));
+        hys_binder.emplace_back(std::move(binder_mean_vector));
+        hys_binder_std.emplace_back(std::move(binder_std_vector));
+        hys_autocorrelation_time.emplace_back(std::move(observable_autocorrelation_time_vector));
 
         integrated_pot_energy_check = total_integrated_pot_energy(
             lat, h, config.param_spec.mu, config.param_spec.J, lmbda
@@ -3577,12 +3579,12 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
     }
 
     return Result{
-        .series_hys=hys_vector, 
-        .mean_hys=hys_mean, 
-        .mean_std_hys=hys_mean_std, 
-        .binder_hys=hys_binder, 
-        .binder_std_hys=hys_binder_std, 
-        .tau_int_hys=hys_autocorrelation_time
+        .series_hys=std::move(hys_vector), 
+        .mean_hys=std::move(hys_mean), 
+        .mean_std_hys=std::move(hys_mean_std), 
+        .binder_hys=std::move(hys_binder), 
+        .binder_std_hys=std::move(hys_binder_std), 
+        .tau_int_hys=std::move(hys_autocorrelation_time)
     };
 }
 
