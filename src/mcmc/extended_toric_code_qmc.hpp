@@ -476,8 +476,21 @@ class ExtendedToricCodeQMC {
 
         std::shared_ptr<RNG> rng;
         std::uniform_real_distribution<double> uniform_dist{0., 1.};
-        std::uniform_int_distribution<int> random_mc_update_dist{0, 6};
         static constexpr double PRECISION = std::numeric_limits<double>::epsilon();
+
+        int random_index(int bound) {
+            return static_cast<int>(
+                paratoric::rng::uniform_index(*rng, static_cast<std::uint64_t>(bound))
+            );
+        }
+
+        double uniform_real(double lower, double upper) {
+            return lower + (upper - lower) * uniform_dist(*rng);
+        }
+
+        bool accept(double ratio) {
+            return ratio >= 1.0 || uniform_dist(*rng) < ratio;
+        }
 
         /**
          * @brief Return the total potential energy (integrated over imaginary time) of the lattice lat.
@@ -618,7 +631,8 @@ class ExtendedToricCodeQMC {
             Lattice& lat, double h, double mu, double J, double lmbda, 
             int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
             double imag_time_spin_flip, double imag_time_next_spin_flip, 
-            bool total_cache
+            bool total_cache,
+            bool interval_has_no_inner_flips = false
         );
 
         /**
@@ -1060,8 +1074,10 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     Lattice& lat, double h, double mu, double J, double lmbda, 
     int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
     double imag_time_spin_flip, double imag_time_next_spin_flip, 
-    bool total_cache
+    bool total_cache,
+    bool interval_has_no_inner_flips
 ) {
+    UNUSED(tuple_index);
     UNUSED(mu);
     UNUSED(J);
     double delta_energy_single = 0.;
@@ -1071,6 +1087,10 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     for (const Lattice::Edge& edg : tuple_edges) {
         if (total_cache) { 
             bare_energy_edg = -2*lat.get_potential_edge_energy(edg);
+        } else if (interval_has_no_inner_flips) {
+            bare_energy_edg = lat.integrated_edge_energy_diff_no_inner_flips(
+                edg, imag_time_spin_flip, imag_time_next_spin_flip
+            );
         } else {
             bare_energy_edg = lat.integrated_edge_energy_diff(edg, imag_time_spin_flip, imag_time_next_spin_flip);
         }
@@ -1213,10 +1233,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
 
     const double rnd_create_destroy = uniform_dist(*rng);
 
-    const auto& [rand_edge, source, target] = lat.get_random_edge();
-
 #ifndef NDEBUG
+    const auto& [rand_edge, source, target] = lat.get_random_edge();
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_single_spin_flip --- Randomly chose edge between vertices {} and {}.", source, target);
+#else
+    const auto rand_edge = lat.get_random_edge_descriptor();
 #endif
     
     std::span<const double> single_spin_flips = lat.get_single_spin_flips(rand_edge);
@@ -1231,9 +1252,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_single_spin_flip --- Trying to DESTROY single spin flip pair.";
 #endif
         if (single_spin_flip_count > 1) [[likely]] {
-            std::uniform_int_distribution<int> random_spin_flip_dist(0, single_spin_flip_count - 2);
-
-            const int random_spin_flip_index = random_spin_flip_dist(*rng);
+            const int random_spin_flip_index = random_index(single_spin_flip_count - 1);
 
             const double imag_time_spin_flip = single_spin_flips[random_spin_flip_index];
 
@@ -1277,7 +1296,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_single_spin_flip --- acceptance ratio: {}", acc_ratio);
 #endif   
             
-            if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+            if (accept(acc_ratio)) {
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_single_spin_flip --- ACCEPTED.";
 #endif   
@@ -1309,8 +1328,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
             tau_left = 0.;
             tau_right = beta;
         } else {
-            std::uniform_int_distribution<int> random_spin_flip_dist(0, single_spin_flip_count);
-            random_spin_flip_index = random_spin_flip_dist(*rng);
+            random_spin_flip_index = random_index(single_spin_flip_count + 1);
 
             if (random_spin_flip_index == 0) [[unlikely]] {
                 tau_left = 0.; // not really necessary
@@ -1330,9 +1348,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
 
         double tau_1 = 0., tau_2 = 0.;
 
-        std::uniform_real_distribution<double> new_times_dist(tau_left, tau_right);
-        tau_1 = new_times_dist(*rng);
-        tau_2 = new_times_dist(*rng);
+        tau_1 = uniform_real(tau_left, tau_right);
+        tau_2 = uniform_real(tau_left, tau_right);
 
         if (tau_2 < tau_1) {
             std::swap(tau_1, tau_2);
@@ -1370,7 +1387,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_single_spin_flip --- acceptance ratio: {}", acc_ratio);
 #endif   
 
-            if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+            if (accept(acc_ratio)) {
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_single_spin_flip --- ACCEPTED.";
 #endif  
@@ -1415,10 +1432,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
         return;
     }
 
-    const auto& [rand_edge, source, target] = lat.get_random_edge();
-
 #ifndef NDEBUG
+    const auto& [rand_edge, source, target] = lat.get_random_edge();
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- Randomly chose edge between vertices {} and {}.", source, target);    
+#else
+    const auto rand_edge = lat.get_random_edge_descriptor();
 #endif
 
     std::span<const double> single_spin_flips = lat.get_single_spin_flips(rand_edge);
@@ -1429,9 +1447,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
 #endif    
 
     if (single_spin_flip_count != 0) [[likely]] {
-        std::uniform_int_distribution<int> random_spin_flip_dist(0, single_spin_flip_count - 1);
-
-        const int random_spin_flip_index = random_spin_flip_dist(*rng);
+        const int random_spin_flip_index = random_index(single_spin_flip_count);
 
         const double imag_time_spin_flip = single_spin_flips[random_spin_flip_index];
 
@@ -1446,8 +1462,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
         const int random_spin_flip_index_lat = lat.get_spin_flip_index(rand_edge, imag_time_spin_flip);
 
         if (imag_time_prev_spin_flip < imag_time_spin_flip && imag_time_spin_flip < imag_time_next_spin_flip) {
-            std::uniform_real_distribution<double> new_time_dist(imag_time_prev_spin_flip, imag_time_next_spin_flip);
-            const double new_imag_time = new_time_dist(*rng);
+            const double new_imag_time = uniform_real(imag_time_prev_spin_flip, imag_time_next_spin_flip);
 
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- New imaginary time: {}", new_imag_time);
@@ -1498,7 +1513,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                 BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                if (accept(acc_ratio)) {
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED.";
 #endif              
@@ -1518,8 +1533,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
 
             }
         } else { // Potentially cross beta
-            std::uniform_real_distribution<double> new_time_dist(imag_time_prev_spin_flip, beta + imag_time_next_spin_flip);
-            const double new_imag_time = modulo(new_time_dist(*rng), beta);
+            const double new_imag_time = modulo(uniform_real(imag_time_prev_spin_flip, beta + imag_time_next_spin_flip), beta);
 
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- New imaginary time: {}", new_imag_time);
@@ -1557,7 +1571,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED.";
 #endif 
@@ -1591,7 +1605,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED.";
 #endif 
@@ -1625,7 +1639,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED.";
 #endif 
@@ -1661,7 +1675,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED.";
 #endif 
@@ -1712,7 +1726,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED. Flipping spin.";
 #endif 
@@ -1764,7 +1778,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- ACCEPTED. Flipping spin.";
 #endif 
@@ -1800,10 +1814,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_single_spin_flip(
     BOOST_LOG_TRIVIAL(debug) << "# Welcome to MC update metropolis_step_global_single_spin_flip!";
 #endif
 
-    const auto& [rand_edge, source, target] = lat.get_random_edge();
-
 #ifndef NDEBUG
+    const auto& [rand_edge, source, target] = lat.get_random_edge();
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_single_spin_flip --- Randomly chose edge between vertices {} and {}.", source, target);
+#else
+    const auto rand_edge = lat.get_random_edge_descriptor();
 #endif
 
     const auto& [integrated_pot_energy_diff_edge, bare_pot_energy_diff_edge] 
@@ -1822,7 +1837,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_single_spin_flip(
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_single_spin_flip --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+    if (accept(acc_ratio)) {
 #ifndef NDEBUG
         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_global_single_spin_flip --- ACCEPTED.";
 #endif 
@@ -1883,7 +1898,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_tuple_flip(
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_single_spin_flip --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+    if (accept(acc_ratio)) {
 #ifndef NDEBUG
         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_global_tuple_flip --- ACCEPTED.";
 #endif 
@@ -1956,9 +1971,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_tuple_flip --- Trying to DESTROY tuple flip pair.";
 #endif
         if (tuple_flip_count > 1) [[likely]] {
-            std::uniform_int_distribution<int> random_tuple_flip_dist(0, tuple_flip_count - 2);
-
-            const int random_tuple_flip_index = random_tuple_flip_dist(*rng);
+            const int random_tuple_flip_index = random_index(tuple_flip_count - 1);
 
             const double imag_time_tuple_flip = tuple_flips[random_tuple_flip_index];
 
@@ -2000,7 +2013,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_tuple_flip --- acceptance ratio: ", acc_ratio);
 #endif  
             
-            if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+            if (accept(acc_ratio)) {
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_tuple_flip --- ACCEPTED.";
 #endif  
@@ -2024,8 +2037,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
         int random_tuple_flip_index = 0;
 
         if (tuple_flip_count > 0) [[likely]] {
-            std::uniform_int_distribution<int> random_tuple_flip_dist(0, tuple_flip_count);
-            random_tuple_flip_index = random_tuple_flip_dist(*rng);
+            random_tuple_flip_index = random_index(tuple_flip_count + 1);
 
             if (random_tuple_flip_index == 0) {
                 tau_left = 0.; //not really necessary
@@ -2048,9 +2060,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
 
         double tau_1 = 0., tau_2 = 0.;
 
-        std::uniform_real_distribution<double> new_times_dist(tau_left, tau_right);
-        tau_1 = new_times_dist(*rng);
-        tau_2 = new_times_dist(*rng);
+        tau_1 = uniform_real(tau_left, tau_right);
+        tau_2 = uniform_real(tau_left, tau_right);
         if (tau_2 < tau_1) {
             std::swap(tau_1, tau_2);
         }
@@ -2087,7 +2098,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_double_tuple_flip --- acceptance ratio: {}", acc_ratio);
 #endif 
 
-            if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+            if (accept(acc_ratio)) {
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_tuple_flip --- ACCEPTED.";
 #endif  
@@ -2154,52 +2165,18 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #endif  
 
     if (tuple_flip_count > 0) [[likely]] {
-        std::uniform_int_distribution<int> random_tuple_flip_dist(0, tuple_flip_count - 1);
-        const int random_tuple_flip_index = random_tuple_flip_dist(*rng);
+        const int random_tuple_flip_index = random_index(tuple_flip_count);
 
         const double imag_time_tuple_flip = tuple_flips[random_tuple_flip_index];
 
-        std::vector<double> imag_times_next_flips = lat.flip_next_imag_times_tuple(tuple_edges, imag_time_tuple_flip);
-
-        std::vector<double> imag_times_prev_flips = lat.flip_prev_imag_times_tuple(tuple_edges, imag_time_tuple_flip);
-
-        double tau_right = imag_times_next_flips[0];
-        if (tau_right < imag_time_tuple_flip) {
-            tau_right += beta;
-        }
-
-        for (double& imag_time : imag_times_next_flips) {
-            if (imag_time < imag_time_tuple_flip) {
-                imag_time += beta;
-            }
-            if (imag_time < tau_right) {
-                tau_right = imag_time;
-            }
-        }
-        tau_right = modulo(tau_right, beta);
-
-        double tau_left = imag_times_prev_flips[0];
-        if (tau_left > imag_time_tuple_flip) {
-            tau_left -= beta;
-        }
-
-        for (double& imag_time : imag_times_prev_flips) {
-            if (imag_time > imag_time_tuple_flip) {
-                imag_time -= beta;
-            }
-            if (imag_time > tau_left) {
-                tau_left = imag_time;
-            }
-        }
-        tau_left = modulo(tau_left, beta);
+        const auto [tau_left, tau_right] = lat.tuple_flip_window(tuple_edges, imag_time_tuple_flip);
 
 #ifndef NDEBUG
         BOOST_LOG_TRIVIAL(debug) << std::format("ropolis_step_single_tuple_flip_move --- Imaginary time of random tuple flip: {}; tau_left: {}; tau_right: {}", imag_time_tuple_flip, tau_left, tau_right);
 #endif  
 
         if (tau_left < imag_time_tuple_flip && imag_time_tuple_flip < tau_right) { // not cross beta
-            std::uniform_real_distribution<double> new_time_dist(tau_left, tau_right);
-            const double new_imag_time = new_time_dist(*rng);
+            const double new_imag_time = uniform_real(tau_left, tau_right);
 
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- New imaginary time: {}", new_imag_time);
@@ -2220,7 +2197,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff_edge, pot_energy_edges_tmp, pot_energy_diffs_tmp] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, new_imag_time, false
+                        imag_time_tuple_flip, new_imag_time, false, true
                     );
                     pot_energy_edges = pot_energy_edges_tmp;
                     pot_energy_diffs = std::move(pot_energy_diffs_tmp);
@@ -2229,7 +2206,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff_edge, pot_energy_edges_tmp, pot_energy_diffs_tmp] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, imag_time_tuple_flip, false
+                        new_imag_time, imag_time_tuple_flip, false, true
                     );
                     pot_energy_edges = pot_energy_edges_tmp;
                     pot_energy_diffs = std::move(pot_energy_diffs_tmp);
@@ -2241,7 +2218,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                 BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                if (accept(acc_ratio)) {
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
@@ -2254,8 +2231,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 
             }
         } else { // Potentially cross beta
-            std::uniform_real_distribution<double> new_time_dist(tau_left, beta + tau_right);
-            const double new_imag_time = modulo(new_time_dist(*rng), beta);
+            const double new_imag_time = modulo(uniform_real(tau_left, beta + tau_right), beta);
 
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- New imaginary time: {}", new_imag_time);
@@ -2278,7 +2254,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, imag_time_tuple_flip, false
+                        new_imag_time, imag_time_tuple_flip, false, true
                     );
                     acc_ratio = std::exp(- integrated_pot_energy_diff);
 
@@ -2286,7 +2262,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
@@ -2300,7 +2276,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, new_imag_time, false
+                        imag_time_tuple_flip, new_imag_time, false, true
                     );
                     acc_ratio = std::exp(- integrated_pot_energy_diff);
 
@@ -2308,7 +2284,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
@@ -2322,13 +2298,13 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     auto [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, beta, false
+                        new_imag_time, beta, false, true
                     );
                     if (imag_time_tuple_flip != 0) {
                         const auto& [integrated_pot_energy_diff_2, pot_energy_edges_2, pot_energy_diffs_2] 
                         = integrated_pot_energy_diff_tuple_flip_edge(
                             lat, h, mu, J, lmbda, random_tuple, tuple_edges,
-                             0., imag_time_tuple_flip, false
+                             0., imag_time_tuple_flip, false, true
                         );
                         for (size_t i = 0; i < pot_energy_edges.size(); ++i) {
                             pot_energy_diffs[i] += pot_energy_diffs_2[i];
@@ -2342,7 +2318,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED. Flipping spins.";
 #endif  
@@ -2361,7 +2337,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, new_imag_time, false
+                        imag_time_tuple_flip, new_imag_time, false, true
                     );
 
                     acc_ratio = std::exp(- integrated_pot_energy_diff);
@@ -2370,7 +2346,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
@@ -2384,7 +2360,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, imag_time_tuple_flip, false
+                        new_imag_time, imag_time_tuple_flip, false, true
                     );
 
                     acc_ratio = std::exp(- integrated_pot_energy_diff);
@@ -2393,7 +2369,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
@@ -2407,13 +2383,13 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     auto [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, beta, false
+                        imag_time_tuple_flip, beta, false, true
                     );
                     if (new_imag_time > 0) {
                         const auto& [integrated_pot_energy_diff_2, pot_energy_edges_2, pot_energy_diffs_2] 
                         = integrated_pot_energy_diff_tuple_flip_edge(
                             lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                            0., new_imag_time, false
+                            0., new_imag_time, false, true
                         );
                         for (size_t i = 0; i < pot_energy_edges.size(); ++i) {
                             pot_energy_diffs[i] += pot_energy_diffs_2[i];
@@ -2427,7 +2403,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-                    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+                    if (accept(acc_ratio)) {
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED. Flipping spins.";
 #endif 
@@ -2510,8 +2486,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #endif
         tuple_destroy = true;
         if (tuple_flip_count > 0) [[likely]] {
-            std::uniform_int_distribution<int> random_tuple_flip_dist(0, tuple_flip_count - 1);
-            random_tuple_flip_index = random_tuple_flip_dist(*rng);
+            random_tuple_flip_index = random_index(tuple_flip_count);
 
             double imag_time_tuple_flip = tuple_flips[random_tuple_flip_index];
             tau_new = imag_time_tuple_flip;
@@ -2553,8 +2528,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
         random_tuple_flip_index = 0;
 
         if (tuple_flip_count > 0) [[likely]] {
-            std::uniform_int_distribution<int> random_tuple_flip_dist(0, tuple_flip_count);
-            random_tuple_flip_index = random_tuple_flip_dist(*rng);
+            random_tuple_flip_index = random_index(tuple_flip_count + 1);
 
             if (random_tuple_flip_index == 0) {
                 tau_left = 0.; // not really necessary
@@ -2576,18 +2550,19 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #endif  
 
         if (tau_left < tau_right) {
-            std::uniform_real_distribution<double> new_time_dist(tau_left, tau_right);
-            tau_new = new_time_dist(*rng);
+            tau_new = uniform_real(tau_left, tau_right);
 
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- Proposed tuple flip imaginary time: {}", tau_new);
 #endif 
 
+#ifndef NDEBUG
             if (lat.check_spin_flips_present_tuple(tuple_edges, tau_new)) {
                 // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
+#endif
 
             if (std::abs(tau_new - tau_left) < PRECISION || std::abs(tau_new - tau_right) < PRECISION) [[unlikely]] {
 #ifndef NDEBUG
@@ -2766,8 +2741,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 
             create_vector.emplace_back(true);
 
-            std::uniform_real_distribution<double> new_time_single_flip_dist(imag_time_prev_flip, imag_time_next_flip);
-            tau_spin_flip = new_time_single_flip_dist(*rng);
+            tau_spin_flip = uniform_real(imag_time_prev_flip, imag_time_next_flip);
 
             if (std::abs(tau_spin_flip - imag_time_prev_flip) < PRECISION 
             || std::abs(tau_spin_flip - imag_time_next_flip) < PRECISION
@@ -2835,7 +2809,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- acceptance ratio: {}", acc_ratio);
 #endif  
 
-    if (uniform_dist(*rng) < (acc_ratio > 1. ? 1. : acc_ratio)) {
+    if (accept(acc_ratio)) {
 #ifndef NDEBUG
         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_spin_tuple_combination --- ACCEPTED.";
 #endif 
@@ -2862,7 +2836,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step(
     Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
     double h, double mu, double J, double lmbda
 ) {
-    const int rnd = random_mc_update_dist(*rng);
+    const int rnd = random_index(7);
     if (rnd < 1) {
         metropolis_step_double_single_spin_flip(lat, integrated_pot_energy, acc_ratio, beta, h, mu, J, lmbda);
     } else if (rnd < 2) {
@@ -3030,7 +3004,10 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     std::vector<std::vector< std::variant< std::complex<double>, double> >> observable_vector;
     std::vector<double> acc_ratio_vector;
     observable_vector.reserve(config.sim_spec.observables.size());
-    acc_ratio_vector.reserve(sample_count * between_sample_count);
+    const bool keep_acc_ratio_series = config.out_spec.full_time_series;
+    if (keep_acc_ratio_series) {
+        acc_ratio_vector.reserve(sample_count * between_sample_count);
+    }
     std::vector<double> observable_mean_vector(config.sim_spec.observables.size(), 0.), 
                         observable_std_vector(config.sim_spec.observables.size(), 0.), 
                         binder_mean_vector(config.sim_spec.observables.size(), 0.), 
@@ -3126,7 +3103,9 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, config.param_spec.h, 
                 config.param_spec.mu, config.param_spec.J, config.param_spec.lmbda
             );
-            acc_ratio_vector.emplace_back(acc_ratio);
+            if (keep_acc_ratio_series) {
+                acc_ratio_vector.emplace_back(acc_ratio);
+            }
             if (total_metropolis_step_count % reset_potential_energy_count == 0) {
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();

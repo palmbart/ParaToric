@@ -1402,7 +1402,11 @@ Lattice::LatticeGraph Lattice::init_lattice_graph(
     plaquette_dist = std::uniform_int_distribution<int>(0, plaquette_vector.size() - 1);
 
     for (auto e : boost::make_iterator_range(boost::edges(g))) {
-        edge_vector.emplace_back(boost::source(e, g), boost::target(e, g));
+        const auto source = static_cast<int>(boost::source(e, g));
+        const auto target = static_cast<int>(boost::target(e, g));
+        g[e].source_vertex = source;
+        g[e].target_vertex = target;
+        edge_vector.emplace_back(source, target);
     }
 
     return g;
@@ -2096,7 +2100,12 @@ double Lattice::flip_next_imag_time(const Edge& edg, double tau) { // TODO repla
 }
 
 std::vector<double> Lattice::flip_next_imag_times_tuple(std::span<const Edge> tuple_edges, double tau) {
-    std::vector<double> imag_times;
+    auto small = flip_next_imag_times_tuple_small(tuple_edges, tau);
+    return {small.begin(), small.end()};
+}
+
+Lattice::SmallEnergyVector Lattice::flip_next_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau) {
+    SmallEnergyVector imag_times;
     imag_times.reserve(tuple_edges.size());
     for (const Edge& edg : tuple_edges) {
         imag_times.emplace_back(flip_next_imag_time(edg, tau));
@@ -2120,12 +2129,59 @@ double Lattice::flip_prev_imag_time(const Edge& edg, double tau) {
 }
 
 std::vector<double> Lattice::flip_prev_imag_times_tuple(std::span<const Edge> tuple_edges, double tau) {
-    std::vector<double> imag_times;
+    auto small = flip_prev_imag_times_tuple_small(tuple_edges, tau);
+    return {small.begin(), small.end()};
+}
+
+Lattice::SmallEnergyVector Lattice::flip_prev_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau) {
+    SmallEnergyVector imag_times;
     imag_times.reserve(tuple_edges.size());
     for (const Edge& edg : tuple_edges) {
         imag_times.emplace_back(flip_prev_imag_time(edg, tau));
     }
     return imag_times;
+}
+
+std::pair<double, double> Lattice::tuple_flip_window(std::span<const Edge> tuple_edges, double tau) {
+    bool initialized = false;
+    double tau_left = tau;
+    double tau_right = tau;
+
+    for (const Edge& edg : tuple_edges) {
+        const auto& spin_flips = g[edg].spin_flips;
+        double next = tau;
+        double prev = tau;
+
+        if (!spin_flips.empty()) [[likely]] {
+            const auto lower = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau);
+            const auto upper = std::upper_bound(lower, spin_flips.end(), tau);
+
+            next = (upper != spin_flips.end()) ? *upper : spin_flips.front();
+            if (next < tau) {
+                next += BETA;
+            }
+
+            prev = (lower != spin_flips.begin()) ? *(lower - 1) : spin_flips.back();
+            if (prev > tau) {
+                prev -= BETA;
+            }
+        }
+
+        if (!initialized) [[unlikely]] {
+            tau_left = prev;
+            tau_right = next;
+            initialized = true;
+        } else {
+            if (next < tau_right) {
+                tau_right = next;
+            }
+            if (prev > tau_left) {
+                tau_left = prev;
+            }
+        }
+    }
+
+    return {modulo(tau_left, BETA), modulo(tau_right, BETA)};
 }
 
 void Lattice::insert_double_single_spin_flip(const Edge& edg, double tau_left, double tau_right) {
@@ -2386,18 +2442,31 @@ void Lattice::flip_star(int v) {
 }
 
 std::tuple<Lattice::Edge, int, int> Lattice::get_random_edge() {
-    size_t edg_index = edge_dist(*rng);
+    const size_t edg_index = static_cast<size_t>(
+        paratoric::rng::uniform_index(*rng, static_cast<std::uint64_t>(egde_cache_.size()))
+    );
     auto [u, v] = edge_vector[edg_index];
     auto edg = egde_cache_[edg_index];
     return {edg, u, v};
 }
 
+Lattice::Edge Lattice::get_random_edge_descriptor() {
+    const size_t edg_index = static_cast<size_t>(
+        paratoric::rng::uniform_index(*rng, static_cast<std::uint64_t>(egde_cache_.size()))
+    );
+    return egde_cache_[edg_index];
+}
+
 int Lattice::get_random_vertex() {
-    return vertex_dist(*rng);
+    return static_cast<int>(
+        paratoric::rng::uniform_index(*rng, static_cast<std::uint64_t>(get_vertex_count()))
+    );
 }
 
 int Lattice::get_random_plaquette_index() {
-    return plaquette_dist(*rng);
+    return static_cast<int>(
+        paratoric::rng::uniform_index(*rng, static_cast<std::uint64_t>(plaquette_vector.size()))
+    );
 }
 
 std::vector<std::pair<int,int>> Lattice::get_plaquette_vertex_pairs(int p_index) {
@@ -2473,9 +2542,13 @@ Lattice::integrated_star_energy_diff(
         target_energy = -2 * get_potential_star_energy(target_v);
     } else {
         const auto& sedges_source = get_star_edges(source_v);
-        source_energy = integrated_tuple_energy_diff(sedges_source, imag_time_1, imag_time_2);
+        source_energy = (BASIS == 'x')
+            ? integrated_tuple_energy_diff_single_flips(sedges_source, imag_time_1, imag_time_2)
+            : integrated_tuple_energy_diff(sedges_source, imag_time_1, imag_time_2);
         const auto& sedges_target = get_star_edges(target_v);
-        target_energy = integrated_tuple_energy_diff(sedges_target, imag_time_1, imag_time_2);
+        target_energy = (BASIS == 'x')
+            ? integrated_tuple_energy_diff_single_flips(sedges_target, imag_time_1, imag_time_2)
+            : integrated_tuple_energy_diff(sedges_target, imag_time_1, imag_time_2);
     }
     star_centers.emplace_back(source_v);
     star_potential_energy_diffs.emplace_back(source_energy);
@@ -2509,7 +2582,9 @@ Lattice::integrated_plaquette_energy_diff(
             energy_p = -2*get_potential_plaquette_energy(p_index);
         } else {
             const auto& pedges = get_plaquette_edges(p_index);
-            energy_p = integrated_tuple_energy_diff(pedges, imag_time_1, imag_time_2);
+            energy_p = (BASIS == 'z')
+                ? integrated_tuple_energy_diff_single_flips(pedges, imag_time_1, imag_time_2)
+                : integrated_tuple_energy_diff(pedges, imag_time_1, imag_time_2);
         }
         plaquette_indices.emplace_back(p_index);
         plaquette_potential_energy_diffs.emplace_back(energy_p);
@@ -2522,7 +2597,9 @@ double Lattice::total_integrated_star_energy() {
     double total_integrated_star_energy = 0.;
     for (size_t star_center = 0; star_center < (size_t)get_vertex_count(); ++star_center) {
         const auto& sedges = get_star_edges(star_center);
-        total_integrated_star_energy += integrated_tuple_energy(sedges, 0, BETA);
+        total_integrated_star_energy += (BASIS == 'x')
+            ? integrated_tuple_energy_single_flips(sedges, 0, BETA)
+            : integrated_tuple_energy(sedges, 0, BETA);
     }
     return total_integrated_star_energy;
 }
@@ -2531,7 +2608,9 @@ double Lattice::total_integrated_plaquette_energy() {
     double total_integrated_plaquette_energy = 0.;
     for (size_t plaquette_index = 0; plaquette_index < plaquette_vector.size(); ++plaquette_index) {
         const auto& pedges = get_plaquette_edges(plaquette_index);
-        total_integrated_plaquette_energy += integrated_tuple_energy(pedges, 0, BETA);
+        total_integrated_plaquette_energy += (BASIS == 'z')
+            ? integrated_tuple_energy_single_flips(pedges, 0, BETA)
+            : integrated_tuple_energy(pedges, 0, BETA);
     }
     return total_integrated_plaquette_energy;
 }
@@ -2593,8 +2672,8 @@ Lattice::integrated_star_energy_diff_combination(
             }
         }
 
-        double energy_v = integrated_tuple_energy_diff_combination(
-            star_edges, imag_time_1, imag_time_2, local_spin_flips
+        double energy_v = integrated_tuple_energy_diff_combination_from_flips(
+            star_edges, imag_time_1, imag_time_2, local_spin_flips, BASIS == 'x'
         );
         star_potential_energy_diffs.emplace_back(energy_v);
         energy += energy_v;
@@ -2642,8 +2721,8 @@ Lattice::integrated_plaquette_energy_diff_combination(
             }
         }
 
-        const double ep = integrated_tuple_energy_diff_combination(
-            plaq, imag_time_1, imag_time_2, flips);
+        const double ep = integrated_tuple_energy_diff_combination_from_flips(
+            plaq, imag_time_1, imag_time_2, flips, BASIS == 'z');
         plaquette_potential_energy_diffs.emplace_back(ep);
         energy_sum += ep;
     }
@@ -2678,12 +2757,12 @@ void Lattice::init_potential_energy() {
     if (BASIS == 'x') {
         for (size_t star_center = 0; star_center < (size_t)get_vertex_count(); ++star_center) {
             const auto& sedges = get_star_edges(star_center);
-            set_potential_star_energy(star_center, integrated_tuple_energy(sedges, 0, BETA));
+            set_potential_star_energy(star_center, integrated_tuple_energy_single_flips(sedges, 0, BETA));
         }
     } else {
         for (size_t plaquette_index = 0; plaquette_index < plaquette_vector.size(); ++plaquette_index) {
             const auto& pedges = get_plaquette_edges(plaquette_index);
-            set_potential_plaquette_energy(plaquette_index, integrated_tuple_energy(pedges, 0, BETA));
+            set_potential_plaquette_energy(plaquette_index, integrated_tuple_energy_single_flips(pedges, 0, BETA));
         }
     }
 }

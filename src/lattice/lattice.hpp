@@ -67,6 +67,8 @@ public:
         double integrated_edge_energy;
         // In this vector we store all the plaquettes of which this edge is part of 
         std::vector<int> part_of_plaquette_lookup;
+        int source_vertex = -1;
+        int target_vertex = -1;
         // For the cubic lattice, this is x, y or z. Important for cube percolation
         std::string orientation;
 
@@ -424,6 +426,8 @@ public:
      * 
      */
     std::vector<double> flip_next_imag_times_tuple(std::span<const Edge> tuple_edges, double tau);
+    SmallEnergyVector flip_next_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau);
+    std::pair<double, double> tuple_flip_window(std::span<const Edge> tuple_edges, double tau);
 
     /**
      * @brief Calculates the imaginary time of the previous spin flip (of any type) before tau at the edge edg. 
@@ -452,6 +456,7 @@ public:
      * 
      */
     std::vector<double> flip_prev_imag_times_tuple(std::span<const Edge> tuple_edges, double tau);
+    SmallEnergyVector flip_prev_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau);
 
     /**
      * @brief Inserts the imaginary time of the spin flips with imaginary times tau_left and tau_right at Edge edg.
@@ -580,6 +585,7 @@ public:
      * 
      */
     std::tuple<Edge, int, int> get_random_edge();
+    Edge get_random_edge_descriptor();
 
     /**
      * @brief Return randomly selected vertex from graph.
@@ -854,6 +860,9 @@ public:
      * 
      */
     double integrated_edge_energy_diff(const Edge& edg, double imag_time_1, double imag_time_2);
+    inline double integrated_edge_energy_diff_no_inner_flips(
+        const Edge& edg, double imag_time_1, double imag_time_2
+    );
 
     /**
      * @brief Return the edge energy DIFFERENCE (integrated over imaginary time) at the edge edg when flipping the spins in spin_flip_lookup in the relevant time interval
@@ -1225,6 +1234,22 @@ private:
         const std::string& boundaries,
         int default_spin
         );
+    inline double integrated_tuple_energy_single_flips(
+        std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
+    );
+    inline double integrated_tuple_energy_diff_single_flips(
+        std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
+    );
+    inline double integrated_tuple_energy_diff_combination_from_flips(
+        std::span<const Edge> tuple_edges,
+        double imag_time_1,
+        double imag_time_2,
+        const std::vector<std::pair<double, int>>& spin_flip_lookup,
+        bool single_flips_only
+    );
+    inline double integrated_tuple_energy_from_flips(
+        std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2, bool single_flips_only
+    );
     std::vector<std::pair<Vertex, Vertex>> edge_vector;
     mutable std::uniform_int_distribution<int> edge_dist;
     mutable std::uniform_int_distribution<int> vertex_dist;
@@ -1453,6 +1478,27 @@ inline double Lattice::integrated_edge_energy_diff_combination(
 }
 
 [[gnu::hot, gnu::always_inline]]
+inline double Lattice::integrated_edge_energy_diff_no_inner_flips(
+    const Edge& edg, double imag_time_1, double imag_time_2
+) {
+    if (imag_time_1 == imag_time_2) {
+        throw std::invalid_argument(
+            "integrated_edge_energy_diff_no_inner_flips: time interval must be non-zero");
+    }
+
+    const auto& spin_flips = g[edg].spin_flips;
+    auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
+
+    int spin = ((it - spin_flips.begin()) & 1) ? -get_spin(edg) : get_spin(edg);
+    while (it != spin_flips.end() && *it == imag_time_1) {
+        spin = -spin;
+        ++it;
+    }
+
+    return -2.0 * (imag_time_2 - imag_time_1) * spin;
+}
+
+[[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_edge_energy_diff_combination(
     const Edge& edg, 
     double imag_time_1, 
@@ -1558,6 +1604,19 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
     double imag_time_2, 
     const std::vector<std::pair<double, int>>& spin_flip_lookup
 ) {
+    return integrated_tuple_energy_diff_combination_from_flips(
+        tuple_edges, imag_time_1, imag_time_2, spin_flip_lookup, false
+    );
+}
+
+[[gnu::hot, gnu::always_inline]]
+inline double Lattice::integrated_tuple_energy_diff_combination_from_flips(
+    std::span<const Edge> tuple_edges,
+    double imag_time_1,
+    double imag_time_2,
+    const std::vector<std::pair<double, int>>& spin_flip_lookup,
+    bool single_flips_only
+) {
     if (spin_flip_lookup.empty()) {
         return 0.0;
     }
@@ -1597,7 +1656,7 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
         if (!spin_at_cutoff_ready) {
             int spin_prod = 1;
             for (const Edge& e : tuple_edges) {
-                const auto& flips = g[e].spin_flips;
+                const auto& flips = single_flips_only ? g[e].single_spin_flips : g[e].spin_flips;
                 const auto hi = std::upper_bound(flips.begin(), flips.end(), imag_time_2);
                 int s = get_spin(e);
                 if (((hi - flips.begin()) & 1) != 0) {
@@ -1618,7 +1677,9 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
         if (t_lo < imag_time_2) {
             const double t_mid = std::min(t_hi, imag_time_2);
             if (t_lo < t_mid) {
-                odd_integral += integrated_tuple_energy(tuple_edges, t_lo, t_mid);
+                odd_integral += integrated_tuple_energy_from_flips(
+                    tuple_edges, t_lo, t_mid, single_flips_only
+                );
             }
             t_lo = t_mid;
         }
@@ -1653,6 +1714,27 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
 inline double Lattice::integrated_tuple_energy(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
 ) {
+    return integrated_tuple_energy_from_flips(tuple_edges, imag_time_1, imag_time_2, false);
+}
+
+[[gnu::hot, gnu::always_inline]]
+inline double Lattice::integrated_tuple_energy_single_flips(
+    std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
+) {
+    return integrated_tuple_energy_from_flips(tuple_edges, imag_time_1, imag_time_2, true);
+}
+
+[[gnu::hot, gnu::always_inline]]
+inline double Lattice::integrated_tuple_energy_diff_single_flips(
+    std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
+) {
+    return -2.0 * integrated_tuple_energy_single_flips(tuple_edges, imag_time_1, imag_time_2);
+}
+
+[[gnu::hot, gnu::always_inline]]
+inline double Lattice::integrated_tuple_energy_from_flips(
+    std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2, bool single_flips_only
+) {
     if (imag_time_1 >= imag_time_2) {
         return 0.0;
     }
@@ -1662,13 +1744,12 @@ inline double Lattice::integrated_tuple_energy(
         std::vector<double>::const_iterator it; // one past current event
     };
 
-    thread_local std::vector<EdgeReverseStream> streams_tls;
-    streams_tls.clear();
-    streams_tls.reserve(tuple_edges.size());
+    boost::container::small_vector<EdgeReverseStream, 8> streams;
+    streams.reserve(tuple_edges.size());
 
     int spin_at_t2 = 1;
     for (auto const& edg : tuple_edges) {
-        auto const& spin_flips = g[edg].spin_flips;
+        auto const& spin_flips = single_flips_only ? g[edg].single_spin_flips : g[edg].spin_flips;
         auto hi = std::upper_bound(spin_flips.begin(), spin_flips.end(), imag_time_2);
 
         int s = get_spin(edg);
@@ -1678,7 +1759,7 @@ inline double Lattice::integrated_tuple_energy(
         spin_at_t2 *= s;
 
         if (hi != spin_flips.begin() && *(hi - 1) >= imag_time_1) {
-            streams_tls.push_back({spin_flips.begin(), hi});
+            streams.push_back({spin_flips.begin(), hi});
         }
     }
 
@@ -1686,10 +1767,10 @@ inline double Lattice::integrated_tuple_energy(
     bool odd = false;
     double t_next = imag_time_2;
 
-    while (!streams_tls.empty()) {
-        double max_t = *(streams_tls[0].it - 1);
-        for (size_t i = 1; i < streams_tls.size(); ++i) {
-            const double cand = *(streams_tls[i].it - 1);
+    while (!streams.empty()) {
+        double max_t = *(streams[0].it - 1);
+        for (size_t i = 1; i < streams.size(); ++i) {
+            const double cand = *(streams[i].it - 1);
             if (cand > max_t) {
                 max_t = cand;
             }
@@ -1700,8 +1781,8 @@ inline double Lattice::integrated_tuple_energy(
 
         bool toggles = false;
         size_t i = 0;
-        while (i < streams_tls.size()) {
-            auto& stream = streams_tls[i];
+        while (i < streams.size()) {
+            auto& stream = streams[i];
             if (*(stream.it - 1) != max_t) {
                 ++i;
                 continue;
@@ -1711,8 +1792,8 @@ inline double Lattice::integrated_tuple_energy(
             --stream.it;
 
             if (stream.it == stream.begin || *(stream.it - 1) < imag_time_1) {
-                streams_tls[i] = streams_tls.back();
-                streams_tls.pop_back();
+                streams[i] = streams.back();
+                streams.pop_back();
                 continue;
             }
             ++i;
