@@ -40,4 +40,24 @@ struct RNG {
     std::uint64_t get_seed() const { return seed_; }
 };
 
+inline std::uint64_t uniform_index(RNG& rng, std::uint64_t bound) {
+    if (bound == 0) {
+        return 0;
+    }
+
+#if defined(__SIZEOF_INT128__)
+    const std::uint64_t threshold = -bound % bound;
+    while (true) {
+        const auto product = static_cast<unsigned __int128>(rng()) * bound;
+        const auto low = static_cast<std::uint64_t>(product);
+        if (low >= threshold) {
+            return static_cast<std::uint64_t>(product >> 64);
+        }
+    }
+#else
+    std::uniform_int_distribution<std::uint64_t> dist(0, bound - 1);
+    return dist(rng);
+#endif
+}
+
 } // namespace paratoric::rng
