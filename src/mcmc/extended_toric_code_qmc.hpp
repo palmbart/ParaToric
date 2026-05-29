@@ -2925,7 +2925,7 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
             config.param_spec.J, config.param_spec.lmbda
         );
 
-        if (total_metropolis_step_count % reset_potential_energy_count == 0) {
+        if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
             // avoid accumulation of small numerical errors leading to bias
             lat.init_potential_energy();
             lat.rotate_imag_time();
@@ -3106,7 +3106,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             if (keep_acc_ratio_series) {
                 acc_ratio_vector.emplace_back(acc_ratio);
             }
-            if (total_metropolis_step_count % reset_potential_energy_count == 0) {
+            if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();
                 lat.rotate_imag_time();
@@ -3402,7 +3402,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, h, 
                 config.param_spec.mu, config.param_spec.J, lmbda
             );
-            if (total_metropolis_step_count % reset_potential_energy_count == 0) {
+            if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();
                 lat.rotate_imag_time();
@@ -3420,7 +3420,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, 
                     h, config.param_spec.mu, config.param_spec.J, lmbda
                 );
-                if (total_metropolis_step_count % reset_potential_energy_count == 0) {
+                if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                     // avoid accumulation of small numerical errors leading to bias
                     lat.init_potential_energy();
                     lat.rotate_imag_time();
