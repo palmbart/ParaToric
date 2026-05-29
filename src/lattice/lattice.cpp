@@ -1591,10 +1591,107 @@ Lattice::construct_fredenhagen_marcu_loops(
                     prev_vertex = next_vertex;
                 } 
             } else {
+                if (SYSTEM_SIZE < 3) {
 #ifndef NDEBUG
-                throw std::invalid_argument("Open honeycomb lattice is not supported for Wilson loops.");
+                    throw std::runtime_error(
+                        std::format(
+                            "System size for open honeycomb Wilson loops has to be at least L=3 but is L={}.",
+                            SYSTEM_SIZE
+                        )
+                    );
 #endif
-                return std::make_pair(half_loop, full_loop);
+                }
+
+                auto honeycomb_vertex = [this](int row, int col) {
+                    if (row == 0) {
+                        return col;
+                    }
+                    return (2 * SYSTEM_SIZE + 1) 
+                        + (row - 1) * (2 * SYSTEM_SIZE + 2) 
+                        + col;
+                };
+
+                auto vertical_down_col = [this](int row, int col) {
+                    if (row == SYSTEM_SIZE - 1 && SYSTEM_SIZE % 2 == 0) {
+                        return col - 1;
+                    }
+                    return col;
+                };
+
+                auto vertical_up_col = [this](int row, int col) {
+                    if (row == SYSTEM_SIZE && SYSTEM_SIZE % 2 == 0) {
+                        return col + 1;
+                    }
+                    return col;
+                };
+
+                int current_row = middle_y;
+                int current_col = start_x + ((start_x & 1) == (middle_y & 1) ? 0 : 1);
+
+                auto append_horizontal = [&](int step) {
+                    const int next_col = current_col + step;
+                    full_loop.emplace_back(
+                        honeycomb_vertex(current_row, current_col),
+                        honeycomb_vertex(current_row, next_col)
+                    );
+                    current_col = next_col;
+                };
+
+                auto append_vertical_down = [&]() {
+                    const int next_col = vertical_down_col(current_row, current_col);
+                    full_loop.emplace_back(
+                        honeycomb_vertex(current_row, current_col),
+                        honeycomb_vertex(current_row + 1, next_col)
+                    );
+                    ++current_row;
+                    current_col = next_col;
+                };
+
+                auto append_vertical_up = [&]() {
+                    const int next_col = vertical_up_col(current_row, current_col);
+                    full_loop.emplace_back(
+                        honeycomb_vertex(current_row, current_col),
+                        honeycomb_vertex(current_row - 1, next_col)
+                    );
+                    --current_row;
+                    current_col = next_col;
+                };
+
+                for (int y = middle_y; y < end_y; y += 2) {
+                    append_vertical_down();
+                    append_horizontal(1);
+                }
+
+                append_horizontal(1);
+
+                for (int x = start_x; x < end_x - 1; x += 2) {
+                    append_horizontal(1);
+                    append_horizontal(1);
+                }
+
+                for (int y = end_y; y > middle_y; y -= 2) {
+                    append_vertical_up();
+                    append_horizontal(1);
+                }
+
+                half_loop = full_loop;
+
+                for (int y = middle_y; y > start_y; y -= 2) {
+                    append_vertical_up();
+                    append_horizontal(-1);
+                }
+
+                append_horizontal(-1);
+
+                for (int x = end_x; x > start_x + 1; x -= 2) {
+                    append_horizontal(-1);
+                    append_horizontal(-1);
+                }
+
+                for (int y = start_y; y < middle_y; y += 2) {
+                    append_vertical_down();
+                    append_horizontal(-1);
+                }
             }
 
         } else if (LATTICE_TYPE == "kagome") {
@@ -1742,11 +1839,82 @@ Lattice::construct_fredenhagen_marcu_loops(
             } 
 
         } else if (LATTICE_TYPE == "honeycomb") {
-            // TODO implement this
+            const int plaquette_max = SYSTEM_SIZE - 1;
+            const int start_y_hc = plaquette_max / 4;
+            const int end_y_hc = (3 * plaquette_max) / 4;
+            const int middle_y_hc = (start_y_hc + end_y_hc) / 2;
+            const int start_x_hc = plaquette_max / 4;
+            const int end_x_hc = (3 * plaquette_max) / 4;
+
+            full_loop.reserve(
+                2 * (end_y_hc - start_y_hc) + 2 * (end_x_hc - start_x_hc)
+            );
+
+            auto plaquette_index = [](int L, int y, int x) {
+                return y * L + x;
+            };
+
+            auto append_common_edge = [&](int plaquette_1, int plaquette_2) {
+                const auto& edges_1 = plaquette_vector[plaquette_1];
+                const auto& edges_2 = plaquette_vector[plaquette_2];
+
+                for (const auto& edge_1 : edges_1) {
+                    const int source_1 = edge_1.first;
+                    const int target_1 = edge_1.second;
+                    for (const auto& edge_2 : edges_2) {
+                        if ((source_1 == edge_2.first && target_1 == edge_2.second)
+                            || (source_1 == edge_2.second && target_1 == edge_2.first)) {
+                            full_loop.emplace_back(source_1, target_1);
+                            return;
+                        }
+                    }
+                }
+
 #ifndef NDEBUG
-            throw std::invalid_argument("Honeycomb lattice is not supported for 't Hooft loops.");
+                throw std::runtime_error("Honeycomb 't Hooft loop crosses non-adjacent plaquettes.");
 #endif
-            return std::make_pair(half_loop, full_loop);
+            };
+
+            int prev_plaquette = plaquette_index(SYSTEM_SIZE, middle_y_hc, start_x_hc);
+            int next_plaquette;
+
+            for (int y = middle_y_hc + 1; y < end_y_hc + 1; ++y) {
+                next_plaquette = plaquette_index(SYSTEM_SIZE, y, start_x_hc);
+                append_common_edge(prev_plaquette, next_plaquette);
+                prev_plaquette = next_plaquette;
+            }
+
+            for (int x = start_x_hc + 1; x < end_x_hc + 1; ++x) {
+                next_plaquette = plaquette_index(SYSTEM_SIZE, end_y_hc, x);
+                append_common_edge(prev_plaquette, next_plaquette);
+                prev_plaquette = next_plaquette;
+            }
+
+            for (int y = end_y_hc - 1; y > middle_y_hc - 1; --y) {
+                next_plaquette = plaquette_index(SYSTEM_SIZE, y, end_x_hc);
+                append_common_edge(prev_plaquette, next_plaquette);
+                prev_plaquette = next_plaquette;
+            }
+
+            half_loop = full_loop;
+
+            for (int y = middle_y_hc - 1; y > start_y_hc - 1; --y) {
+                next_plaquette = plaquette_index(SYSTEM_SIZE, y, end_x_hc);
+                append_common_edge(prev_plaquette, next_plaquette);
+                prev_plaquette = next_plaquette;
+            }
+
+            for (int x = end_x_hc - 1; x > start_x_hc - 1; --x) {
+                next_plaquette = plaquette_index(SYSTEM_SIZE, start_y_hc, x);
+                append_common_edge(prev_plaquette, next_plaquette);
+                prev_plaquette = next_plaquette;
+            }
+
+            for (int y = start_y_hc + 1; y < middle_y_hc + 1; ++y) {
+                next_plaquette = plaquette_index(SYSTEM_SIZE, y, start_x_hc);
+                append_common_edge(prev_plaquette, next_plaquette);
+                prev_plaquette = next_plaquette;
+            }
         } else if (LATTICE_TYPE == "kagome") {
             // TODO implement this
 #ifndef NDEBUG
