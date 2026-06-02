@@ -62,3 +62,91 @@ refreshed documentation and dependencies.
 - Project-side changes excluding vendored `pybind11`: 22 files changed,
   630 insertions, 272 deletions.
 - Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0...v1.0.1
+
+# ParaToric v1.0 Release Notes
+
+Release date: 2026-02-10
+
+v1.0 is the first stable release after v1.0-beta. It expands the observable
+set, adds hysteresis workflow support, improves open-boundary percolation
+handling, fixes several susceptibility and potential-energy issues, and
+strengthens the test suite.
+
+## Highlights
+
+- Added the Python CLI hysteresis sweep workflow and documented
+  `etc_hysteresis` usage for forward and backward parameter schedules.
+- Added new observables for `largest_plaquette_cluster` and
+  `plaquette_percolation_strength`.
+- Added support for plaquette percolation probability and strength on open
+  boundaries.
+- Split susceptibility observables into explicit static and dynamical variants:
+  `sigma_x_static_susceptibility`, `sigma_x_dynamical_susceptibility`,
+  `sigma_z_static_susceptibility`, and `sigma_z_dynamical_susceptibility`.
+- Added integrated autocorrelation-time output and plotting for sweep results.
+- Returned/stored acceptance-ratio series for regular sampling runs.
+- Added CMake package configuration support via `paratoricConfig.cmake.in`.
+
+## User-Facing Changes
+
+- README examples were refreshed with the v1.0 observable names and larger
+  production-oriented sample settings.
+- The documentation PDF was updated to a newer arXiv version, and the README now
+  includes the arXiv citation link.
+- Funding acknowledgements were added to the README.
+- Thermalization plots now label the x-axis as "Monte Carlo update" instead of
+  "Monte Carlo step".
+- Python sweep internals now consistently use `*_lower` and `*_upper` parameter
+  names instead of mixed `*_low` and `*_high` names.
+
+## Fixes
+
+- Fixed potential-energy initialization for hysteresis simulations and
+  `custom_therm` runs; additional consistency checks now detect cached
+  integrated-potential-energy mismatches.
+- Fixed high-field/few-flip integrated edge-energy calculations that could
+  incorrectly return zero.
+- Fixed the dynamical susceptibility factor-of-two issue and adjusted
+  susceptibility normalization.
+- Fixed combination-update potential-energy cache updates to apply edge
+  corrections to the actual affected edges.
+- Improved open-style percolation checks so periodic seam links are not treated
+  as open-boundary connections.
+
+## Performance And Internals
+
+- Added cached plaquette-to-vertex and star-to-plaquette lookup tables for
+  faster star/plaquette combination updates.
+- Reworked tuple and edge combination energy-difference paths to reduce
+  temporary allocations and avoid unnecessary event-stream work.
+- Added `PARATORIC_ENABLE_FAST_MATH`, enabled by default, to compile
+  `paratoric_core` with `-ffast-math` on Clang/GNU.
+- Improved consistency between star and plaquette update algorithms and cleaned
+  up diagnostic output.
+
+## Tests
+
+- Mirrored the `src/` folder structure under `tests/`.
+- Added a dedicated `tests/mcmc/test_extended_toric_code_qmc.cpp` suite.
+- Added more lattice and QMC test cases across additional lattices and parameter
+  regimes.
+
+## Compatibility Notes
+
+- Existing CLI flags remain centered on `*_lower` and `*_upper`, but direct
+  Python callers of `JobHandler` sweep methods should use the renamed
+  `*_lower`/`*_upper` keyword arguments.
+- The old observable names `sigma_x_susceptibility` and
+  `sigma_z_susceptibility` were replaced by the explicit static susceptibility
+  names. Use the new dynamical names for dynamical susceptibility estimators.
+- Builds now use `-ffast-math` by default for Clang/GNU through
+  `PARATORIC_ENABLE_FAST_MATH=ON`. Configure with
+  `-DPARATORIC_ENABLE_FAST_MATH=OFF` if strict floating-point semantics are
+  required.
+
+## Reference
+
+- Compared with `v1.0-beta`: 39 commits.
+- Project-side changes excluding vendored dependencies: 15 files changed,
+  2150 insertions, 853 deletions.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0-beta...v1.0
