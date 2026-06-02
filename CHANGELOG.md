@@ -150,3 +150,76 @@ strengthens the test suite.
 - Project-side changes excluding vendored dependencies: 15 files changed,
   2150 insertions, 853 deletions.
 - Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0-beta...v1.0
+
+# ParaToric v1.0-beta Release Notes
+
+Release date: 2025-10-16
+
+v1.0-beta is the initial public release of ParaToric. It introduced the C++23
+continuous-time quantum Monte Carlo implementation for the extended toric code
+in parallel fields, together with C/C++/Python interfaces, command line tools,
+documentation, and baseline tests.
+
+## Highlights
+
+- Added the core continuous-time QMC implementation for the extended/perturbed
+  toric code at finite temperature in the `x` and `z` bases.
+- Added lattice construction and update support for square, cubic, triangular,
+  honeycomb, and kagome-style geometries, with periodic/open boundary handling
+  where implemented.
+- Added public C++ APIs via `paratoric::ExtendedToricCode` for thermalization,
+  sampling, and hysteresis simulations.
+- Added a C API wrapper with explicit status codes, result structs, and result
+  cleanup support.
+- Added optional Python bindings through vendored `pybind11`, with typed package
+  metadata and NumPy-based return values.
+- Added C++ and Python command line workflows for sample, thermalization,
+  temperature sweeps, field sweeps, circle sweeps, and hysteresis runs.
+- Added HDF5 output for observables, summary statistics, Binder ratios,
+  autocorrelation estimates, acceptance ratios, and optional full time series.
+
+## Observable Set
+
+- Included energy observables: `energy`, `energy_h`, `energy_mu`, `energy_J`,
+  and `energy_lmbda`.
+- Included local and topological observables such as `sigma_x`, `sigma_z`,
+  `star_x`, `plaquette_z`, `delta`, `string_number`, `anyon_count`,
+  `anyon_density`, `staggered_imaginary_times`, and `fredenhagen_marcu`.
+- Included percolation observables for string/plaquette/cube diagnostics,
+  including `percolation_probability`, `percolation_strength`,
+  `plaquette_percolation_probability`, and `cube_percolation_probability`.
+- Included the beta-era susceptibility names `sigma_x_susceptibility` and
+  `sigma_z_susceptibility`.
+
+## Tooling And Packaging
+
+- Added a CMake build for `paratoric_core`, the optional C++ CLI, tests, and
+  optional Python bindings.
+- Added support for native CPU optimization, AVX2 flags, and optional MPI
+  linking.
+- Added Python packaging metadata for the `paratoric` package.
+- Added a SLURM job-script creation notebook under `scripts/`.
+- Added project documentation PDF and logo assets.
+- Added Boost unit tests for lattice construction and extended toric code QMC
+  behavior.
+
+## Known Beta Limitations
+
+- The `v1.0-beta` tag was the first public snapshot, so there is no prior
+  release comparison.
+- The CMake package config template referenced by the build was missing in this
+  beta tag; it was added in `v1.0`.
+- Hysteresis support was present in the APIs and Python CLI, but README
+  documentation for the workflow was added later in `v1.0`.
+- Dynamical susceptibility observables were partially implemented internally but
+  not exposed in the beta observable map.
+- Open-boundary honeycomb Wilson loops and honeycomb/kagome 't Hooft loop
+  support were not yet available for all Fredenhagen-Marcu use cases.
+- Some percolation and susceptibility estimators were refined in the subsequent
+  `v1.0` release.
+
+## Reference
+
+- Initial public release commit: `5fb6b7d`.
+- Initial snapshot size: 392 files changed, 99195 insertions.
+- Source tag: https://github.com/palmbart/ParaToric/releases/tag/v1.0-beta
