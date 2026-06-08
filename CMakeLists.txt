@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.23) # for FILE_SET
 project(paratoric
-  VERSION 1.0
+  VERSION 1.0.1
   LANGUAGES CXX C
 )
 
