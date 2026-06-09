@@ -20,11 +20,13 @@
 #include <concepts>
 #include <complex>
 #include <filesystem>
+#include <format>
 #include <iostream>
 #include <limits>
 #include <numeric>
 #include <random>
 #include <span>
+#include <string>
 #include <tuple>
 #include <variant>
 #include <vector>
@@ -477,6 +479,7 @@ class ExtendedToricCodeQMC {
         std::shared_ptr<RNG> rng;
         std::uniform_real_distribution<double> uniform_dist{0., 1.};
         static constexpr double PRECISION = std::numeric_limits<double>::epsilon();
+        static constexpr double AUTOCORRELATION_WARNING_SAMPLE_FRACTION = 0.1;
 
         int random_index(int bound) {
             return static_cast<int>(
@@ -491,6 +494,15 @@ class ExtendedToricCodeQMC {
         bool accept(double ratio) {
             return ratio >= 1.0 || uniform_dist(*rng) < ratio;
         }
+
+        static double calculate_autocorrelation_time_with_warning(
+            const std::vector<double>& obs_real,
+            const std::string& observable_name,
+            bool has_hysteresis_context = false,
+            size_t hysteresis_point = 0,
+            double h = 0.,
+            double lmbda = 0.
+        );
 
         /**
          * @brief Return the total potential energy (integrated over imaginary time) of the lattice lat.
@@ -2864,6 +2876,40 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step(
 
 template<char Basis>
 requires ValidBasis<Basis>
+double ExtendedToricCodeQMC<Basis>::calculate_autocorrelation_time_with_warning(
+    const std::vector<double>& obs_real,
+    const std::string& observable_name,
+    bool has_hysteresis_context,
+    size_t hysteresis_point,
+    double h,
+    double lmbda
+) {
+    const double autocorrelation_time = paratoric::statistics::get_autocorrelation_time(
+        paratoric::statistics::get_autocorrelation_function(obs_real)
+    );
+    const size_t sample_count = obs_real.size();
+    const double warning_threshold =
+        AUTOCORRELATION_WARNING_SAMPLE_FRACTION * static_cast<double>(sample_count);
+
+    if (sample_count > 0 && autocorrelation_time > warning_threshold) {
+        const std::string hysteresis_context = has_hysteresis_context
+            ? std::format(" at hysteresis point {} (h={}, lmbda={})", hysteresis_point, h, lmbda)
+            : "";
+
+        BOOST_LOG_TRIVIAL(warning)
+            << "Autocorrelation time for observable \""
+            << observable_name << "\"" << hysteresis_context
+            << " is " << autocorrelation_time
+            << ", greater than " << AUTOCORRELATION_WARNING_SAMPLE_FRACTION
+            << " * number of samples (" << warning_threshold
+            << " for " << sample_count << " samples).";
+    }
+
+    return autocorrelation_time;
+}
+
+template<char Basis>
+requires ValidBasis<Basis>
 Result ExtendedToricCodeQMC<Basis>::get_thermalization(
     const Config& config
 ) {
@@ -3140,7 +3186,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             binder_mean_vector[k] = binder_mean;
             binder_std_vector[k] = binder_std;
             observable_autocorrelation_time_vector[k] 
-            = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+            = calculate_autocorrelation_time_with_warning(obs_real, config.sim_spec.observables[k]);
         } else if (obs_type_vec[k] == "fredenhagen_marcu") {
             const auto& series = observable_vector[k];
             const size_t N = series.size();
@@ -3170,7 +3216,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             binder_mean_vector[k] = binder_mean;
             binder_std_vector[k] = binder_std;
             observable_autocorrelation_time_vector[k] 
-            = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+            = calculate_autocorrelation_time_with_warning(obs_real, config.sim_spec.observables[k]);
         } else if (obs_type_vec[k] == "susceptibility") {
             const auto& series = observable_vector[k];
             const size_t N = series.size();
@@ -3203,7 +3249,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 binder_mean_vector[k] = binder_mean;
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
-                = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                = calculate_autocorrelation_time_with_warning(obs_real, config.sim_spec.observables[k]);
             } else if (config.sim_spec.observables[k] == "sigma_x_static_susceptibility" && Basis == 'z') {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                 = paratoric::statistics::bootstrap_offdiag_susceptibility(
@@ -3215,7 +3261,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 binder_mean_vector[k] = binder_mean;
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
-                = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                = calculate_autocorrelation_time_with_warning(obs_real, config.sim_spec.observables[k]);
             } else if ((config.sim_spec.observables[k] == "sigma_z_dynamical_susceptibility" && Basis == 'x')
                         || (config.sim_spec.observables[k] == "sigma_x_dynamical_susceptibility" && Basis == 'z')) {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
@@ -3227,7 +3273,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 binder_mean_vector[k] = binder_mean;
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
-                = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                = calculate_autocorrelation_time_with_warning(obs_real, config.sim_spec.observables[k]);
             } else {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                 = paratoric::statistics::get_bootstrap_statistics_susceptibility(
@@ -3238,7 +3284,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 binder_mean_vector[k] = binder_mean;
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
-                = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                = calculate_autocorrelation_time_with_warning(obs_real, config.sim_spec.observables[k]);
             }
         }
     }
@@ -3450,7 +3496,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 binder_mean_vector[k] = binder_mean;
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
-                = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                = calculate_autocorrelation_time_with_warning(
+                    obs_real, config.sim_spec.observables[k], true, n, h, lmbda
+                );
             } else if (obs_type_vec[k] == "fredenhagen_marcu") {
                 const auto& series = observable_vector[k];
                 const size_t N = series.size();
@@ -3480,7 +3528,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 binder_mean_vector[k] = binder_mean;
                 binder_std_vector[k] = binder_std;
                 observable_autocorrelation_time_vector[k] 
-                = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                = calculate_autocorrelation_time_with_warning(
+                    obs_real, config.sim_spec.observables[k], true, n, h, lmbda
+                );
             } else if (obs_type_vec[k] == "susceptibility") {
                 const auto& series = observable_vector[k];
                 const size_t N = series.size();
@@ -3513,7 +3563,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     binder_mean_vector[k] = binder_mean;
                     binder_std_vector[k] = binder_std;
                     observable_autocorrelation_time_vector[k] 
-                    = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                    = calculate_autocorrelation_time_with_warning(
+                        obs_real, config.sim_spec.observables[k], true, n, h, lmbda
+                    );
                 } else if (config.sim_spec.observables[k] == "sigma_x_static_susceptibility" && Basis == 'z') {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::bootstrap_offdiag_susceptibility(
@@ -3525,7 +3577,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     binder_mean_vector[k] = binder_mean;
                     binder_std_vector[k] = binder_std;
                     observable_autocorrelation_time_vector[k] 
-                    = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                    = calculate_autocorrelation_time_with_warning(
+                        obs_real, config.sim_spec.observables[k], true, n, h, lmbda
+                    );
                 } else if ((config.sim_spec.observables[k] == "sigma_z_dynamical_susceptibility" && Basis == 'x')
                             || (config.sim_spec.observables[k] == "sigma_x_dynamical_susceptibility" && Basis == 'z')) {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
@@ -3537,7 +3591,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     binder_mean_vector[k] = binder_mean;
                     binder_std_vector[k] = binder_std;
                     observable_autocorrelation_time_vector[k] 
-                    = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                    = calculate_autocorrelation_time_with_warning(
+                        obs_real, config.sim_spec.observables[k], true, n, h, lmbda
+                    );
                 } else {
                     const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                     = paratoric::statistics::get_bootstrap_statistics_susceptibility(
@@ -3548,7 +3604,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                     binder_mean_vector[k] = binder_mean;
                     binder_std_vector[k] = binder_std;
                     observable_autocorrelation_time_vector[k] 
-                    = paratoric::statistics::get_autocorrelation_time(paratoric::statistics::get_autocorrelation_function(obs_real));
+                    = calculate_autocorrelation_time_with_warning(
+                        obs_real, config.sim_spec.observables[k], true, n, h, lmbda
+                    );
                 }
             } 
         }
