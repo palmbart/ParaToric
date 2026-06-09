@@ -3000,7 +3000,6 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     
     // Vector to store observable results for all snapshots
     const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
-    const auto between_sample_count = static_cast<size_t>(std::max(config.sim_spec.N_between_samples, 0));
     std::vector<std::vector< std::variant< std::complex<double>, double> >> observable_vector;
     observable_vector.reserve(config.sim_spec.observables.size());
     std::vector<double> observable_mean_vector(config.sim_spec.observables.size(), 0.), 
