@@ -11,9 +11,12 @@
 
 #include <concepts>
 #include <complex>
+#include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <span>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -57,7 +60,7 @@ public:
     struct EdgeData {
         // This int (+1 or -1) stores the local spin at imaginary time zero (beta)
         int spin = 1;
-        // This string stores the spin for different snapshots
+        // Legacy GraphML property. Production snapshot histories are spooled to disk.
         std::string spin_string = "";
         // In this vector the imaginary times of any type of spin flip (single or tuple) are stored
         std::vector<double> spin_flips; 
@@ -1140,7 +1143,7 @@ public:
     void rotate_imag_time();
 
     /**
-     * @brief Appends the current spin to the spin_string for each edge.
+     * @brief Appends the current spin snapshot to the on-disk snapshot spool.
      * 
      */
     void update_spin_string();
@@ -1197,6 +1200,26 @@ private:
     // Edge descriptors
     std::vector<Edge> egde_cache_;
 
+    struct SnapshotSpoolState {
+        std::filesystem::path path{};
+        std::ofstream stream{};
+        std::size_t edge_count = 0;
+        std::size_t sample_count = 0;
+
+        SnapshotSpoolState() = default;
+        SnapshotSpoolState(const SnapshotSpoolState&)
+            : path{}, stream{}, edge_count(0), sample_count(0) {}
+        SnapshotSpoolState& operator=(const SnapshotSpoolState&) {
+            reset();
+            return *this;
+        }
+        ~SnapshotSpoolState();
+
+        bool active() const { return !path.empty(); }
+        void reset();
+    };
+    SnapshotSpoolState snapshot_spool_;
+
     // These two vectors are used to calculate the Fredenhagen-Marcu order parameter
     std::vector<VertexPair> half_path_vector;
     std::vector<VertexPair> full_path_vector;
@@ -1212,6 +1235,8 @@ private:
      */
     void check_input_validity() const;
     void build_caches_();
+    void ensure_snapshot_spool_();
+    void write_snapshot_graphml_from_spool_(const std::string& file_name, const std::filesystem::path& output_directory);
 
     /**
      * @brief Constructs and returns LatticeGraph object which stores all physical information

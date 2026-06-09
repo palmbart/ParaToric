@@ -11,10 +11,12 @@
 #include <chrono>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <numeric>
 #include <queue>
 #include <random>
@@ -22,6 +24,7 @@
 #include <span>
 #include <sstream>
 #include <stack>
+#include <system_error>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -29,6 +32,23 @@
 #define UNUSED(expr) do { (void)(expr); } while (0)
 
 namespace paratoric {
+
+void Lattice::SnapshotSpoolState::reset() {
+    if (stream.is_open()) {
+        stream.close();
+    }
+    if (!path.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        path.clear();
+    }
+    edge_count = 0;
+    sample_count = 0;
+}
+
+Lattice::SnapshotSpoolState::~SnapshotSpoolState() {
+    reset();
+}
 
 void Lattice::check_input_validity() const {
     if (DEFAULT_SPIN != -1 && DEFAULT_SPIN != 1) {
@@ -3838,18 +3858,219 @@ void Lattice::rotate_imag_time() {
 
 }
 
+void Lattice::ensure_snapshot_spool_() {
+    if (snapshot_spool_.active()) return;
+
+    const auto dir = std::filesystem::temp_directory_path();
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto self = reinterpret_cast<std::uintptr_t>(this);
+
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        auto path = dir / (
+            "paratoric_snapshots_" + std::to_string(stamp) + "_" +
+            std::to_string(self) + "_" + std::to_string(attempt) + ".bin"
+        );
+        if (std::filesystem::exists(path)) continue;
+
+        snapshot_spool_.stream.open(path, std::ios::binary | std::ios::out | std::ios::trunc);
+        if (!snapshot_spool_.stream) {
+            snapshot_spool_.stream.close();
+            continue;
+        }
+
+        snapshot_spool_.path = path;
+        snapshot_spool_.edge_count = egde_cache_.size();
+        snapshot_spool_.sample_count = 0;
+
+        for (const auto& edg : egde_cache_) {
+            g[edg].spin_string.clear();
+            g[edg].spin_string.shrink_to_fit();
+        }
+        return;
+    }
+
+    throw std::runtime_error("Could not create temporary snapshot spool file.");
+}
+
 void Lattice::update_spin_string() {
+    ensure_snapshot_spool_();
+
     for (const auto& edg : egde_cache_) {
-        auto& g_edg = g[edg];
-        if (g_edg.spin_string.empty()) {
-            g_edg.spin_string = std::to_string(g_edg.spin);
-        } else {
-            g_edg.spin_string += " " + std::to_string(g_edg.spin);
+        const char spin = g[edg].spin > 0 ? '1' : '0';
+        snapshot_spool_.stream.write(&spin, 1);
+    }
+    if (!snapshot_spool_.stream) {
+        throw std::runtime_error("Could not write snapshot to temporary spool file.");
+    }
+    ++snapshot_spool_.sample_count;
+}
+
+void Lattice::write_snapshot_graphml_from_spool_(
+    const std::string& file_name,
+    const std::filesystem::path& output_directory
+) {
+    if (snapshot_spool_.stream.is_open()) {
+        snapshot_spool_.stream.flush();
+        snapshot_spool_.stream.close();
+    }
+
+    if (snapshot_spool_.edge_count != egde_cache_.size()) {
+        throw std::runtime_error("Snapshot spool edge count does not match current lattice.");
+    }
+
+    struct ScopedTempFile {
+        std::filesystem::path path{};
+        ~ScopedTempFile() {
+            if (!path.empty()) {
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+            }
+        }
+    };
+
+    const std::size_t edge_count = snapshot_spool_.edge_count;
+    const std::size_t sample_count = snapshot_spool_.sample_count;
+    const auto max_stream_offset = static_cast<std::uintmax_t>(std::numeric_limits<std::streamoff>::max());
+    if (edge_count != 0 && sample_count > max_stream_offset / edge_count) {
+        throw std::runtime_error("Snapshot spool is too large for stream offsets.");
+    }
+
+    ScopedTempFile column_spool;
+    {
+        const auto dir = std::filesystem::temp_directory_path();
+        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto self = reinterpret_cast<std::uintptr_t>(this);
+
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            auto path = dir / (
+                "paratoric_snapshots_columns_" + std::to_string(stamp) + "_" +
+                std::to_string(self) + "_" + std::to_string(attempt) + ".bin"
+            );
+            if (std::filesystem::exists(path)) continue;
+
+            std::fstream column_stream(path, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+            if (!column_stream) {
+                column_stream.close();
+                continue;
+            }
+
+            column_spool.path = path;
+            const std::size_t target_tile_bytes = 8ULL * 1024ULL * 1024ULL;
+            const std::size_t samples_per_tile = edge_count == 0
+                ? 1
+                : std::max<std::size_t>(1, target_tile_bytes / edge_count);
+            std::vector<char> row_tile(samples_per_tile * edge_count);
+            std::vector<char> edge_tile(samples_per_tile);
+
+            std::ifstream row_stream(snapshot_spool_.path, std::ios::binary | std::ios::in);
+            if (!row_stream) {
+                throw std::runtime_error("Could not reopen temporary snapshot spool file.");
+            }
+
+            for (std::size_t sample_begin = 0; sample_begin < sample_count; sample_begin += samples_per_tile) {
+                const std::size_t tile_samples = std::min(samples_per_tile, sample_count - sample_begin);
+                const std::size_t tile_bytes = tile_samples * edge_count;
+                row_stream.read(row_tile.data(), static_cast<std::streamsize>(tile_bytes));
+                if (row_stream.gcount() != static_cast<std::streamsize>(tile_bytes)) {
+                    throw std::runtime_error("Snapshot spool file ended unexpectedly.");
+                }
+
+                for (std::size_t edge_index = 0; edge_index < edge_count; ++edge_index) {
+                    for (std::size_t sample = 0; sample < tile_samples; ++sample) {
+                        edge_tile[sample] = row_tile[sample * edge_count + edge_index];
+                    }
+
+                    const auto offset = static_cast<std::streamoff>(
+                        edge_index * sample_count + sample_begin
+                    );
+                    column_stream.seekp(offset);
+                    column_stream.write(edge_tile.data(), static_cast<std::streamsize>(tile_samples));
+                    if (!column_stream) {
+                        throw std::runtime_error("Could not write transposed snapshot spool file.");
+                    }
+                }
+            }
+            column_stream.close();
+            break;
+        }
+
+        if (column_spool.path.empty()) {
+            throw std::runtime_error("Could not create temporary transposed snapshot spool file.");
         }
     }
+
+    std::filesystem::path path_file(file_name + ".xml");
+    std::filesystem::path path_out = output_directory / path_file;
+    std::ofstream graphml_file(path_out);
+    if (!graphml_file) {
+        throw std::runtime_error(std::format("Could not open GraphML output file \"{}\".", path_out.string()));
+    }
+
+    graphml_file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+    graphml_file << "<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd\">\n";
+    graphml_file << "  <key id=\"key0\" for=\"edge\" attr.name=\"spin\" attr.type=\"string\" />\n";
+    graphml_file << "  <key id=\"key1\" for=\"node\" attr.name=\"x\" attr.type=\"double\" />\n";
+    graphml_file << "  <key id=\"key2\" for=\"node\" attr.name=\"y\" attr.type=\"double\" />\n";
+    graphml_file << "  <key id=\"key3\" for=\"node\" attr.name=\"z\" attr.type=\"double\" />\n";
+    graphml_file << "  <graph id=\"G\" edgedefault=\"undirected\" parse.nodeids=\"canonical\" parse.edgeids=\"canonical\" parse.order=\"nodesfirst\">\n";
+
+    for (const auto& v : boost::make_iterator_range(boost::vertices(g))) {
+        graphml_file << "    <node id=\"n" << v << "\">\n";
+        graphml_file << "      <data key=\"key1\">" << g[v].x << "</data>\n";
+        graphml_file << "      <data key=\"key2\">" << g[v].y << "</data>\n";
+        graphml_file << "      <data key=\"key3\">" << g[v].z << "</data>\n";
+        graphml_file << "    </node>\n";
+    }
+
+    std::ifstream column_stream(column_spool.path, std::ios::binary | std::ios::in);
+    if (!column_stream) {
+        throw std::runtime_error("Could not reopen transposed snapshot spool file.");
+    }
+    const std::size_t xml_chunk_samples = 64ULL * 1024ULL;
+    std::vector<char> edge_chunk(std::min(xml_chunk_samples, std::max<std::size_t>(sample_count, 1)));
+
+    for (std::size_t edge_index = 0; edge_index < edge_count; ++edge_index) {
+        const auto& edg = egde_cache_[edge_index];
+        graphml_file << "    <edge id=\"e" << edge_index << "\" source=\"n"
+                     << boost::source(edg, g) << "\" target=\"n" << boost::target(edg, g) << "\">\n";
+        graphml_file << "      <data key=\"key0\">";
+
+        const auto offset = static_cast<std::streamoff>(edge_index * sample_count);
+        column_stream.seekg(offset);
+        bool first_sample = true;
+        for (std::size_t sample_begin = 0; sample_begin < sample_count; sample_begin += xml_chunk_samples) {
+            const std::size_t chunk_samples = std::min(xml_chunk_samples, sample_count - sample_begin);
+            column_stream.read(edge_chunk.data(), static_cast<std::streamsize>(chunk_samples));
+            if (column_stream.gcount() != static_cast<std::streamsize>(chunk_samples)) {
+                throw std::runtime_error("Transposed snapshot spool file ended unexpectedly.");
+            }
+
+            for (std::size_t sample = 0; sample < chunk_samples; ++sample) {
+                if (!first_sample) graphml_file << ' ';
+                first_sample = false;
+                if (edge_chunk[sample] == '1') graphml_file << '1';
+                else graphml_file << "-1";
+            }
+        }
+        graphml_file << "</data>\n";
+        graphml_file << "    </edge>\n";
+    }
+
+    graphml_file << "  </graph>\n";
+    graphml_file << "</graphml>\n";
+    if (!graphml_file) {
+        throw std::runtime_error(std::format("Could not finish GraphML output file \"{}\".", path_out.string()));
+    }
+
+    snapshot_spool_.reset();
 }
 
 void Lattice::write_graph(const std::string& file_name, const std::filesystem::path& output_directory) {
+    if (snapshot_spool_.active()) {
+        write_snapshot_graphml_from_spool_(file_name, output_directory);
+        return;
+    }
+
     // Assemble ofstream
     std::filesystem::path path_file(file_name + ".xml");
     std::filesystem::path path_out = output_directory / path_file;
