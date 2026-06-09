@@ -215,7 +215,7 @@ inline std::tuple<double,double,double,double> get_bootstrap_statistics_fm(
 
     double sum_numerator_hat = 0;
     double sum_denominator_hat = 0;
-    for (size_t i = 1; i < half.size(); ++i) {
+    for (size_t i = 0; i < half.size(); ++i) {
         sum_numerator_hat += half[i];
         sum_denominator_hat += full[i];
     }
