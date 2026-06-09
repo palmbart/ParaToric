@@ -1,3 +1,73 @@
+# ParaToric v1.0.2 Release Notes
+
+Release date: 2026-06-10
+
+v1.0.2 is a maintenance release over v1.0.1 focused on lower memory use for
+production runs, clearer convergence diagnostics, and a corrected
+Fredenhagen-Marcu bootstrap estimator.
+
+## Highlights
+
+- Fixed a Fredenhagen-Marcu bootstrap bias by including the first measurement
+  when estimating the numerator and denominator means.
+- Greatly reduced RAM usage when saving snapshots by spooling spin histories to
+  temporary binary files and streaming the final GraphML output instead of
+  accumulating per-edge spin strings in memory.
+- Greatly reduced production-run memory usage by no longer storing sample
+  acceptance-ratio time series in `get_sample()` results.
+- Added warning logs when an observable's estimated integrated autocorrelation
+  time exceeds 10% of the sample count. Hysteresis warnings include the
+  hysteresis point and current `h`/`lmbda` values.
+- Backfilled release notes for `v1.0` and `v1.0-beta`, refreshed ParaToric
+  version metadata, corrected stale README reference links, and updated the
+  job-script notebook Python metadata.
+
+## User-Facing Changes
+
+- Snapshot GraphML output is now written through disk-backed temporary spools,
+  allowing larger saved snapshot histories with substantially lower peak memory
+  pressure.
+- Sample runs no longer return or write the acceptance-ratio time series for
+  production sampling. Thermalization runs still return acceptance-ratio
+  diagnostics.
+- Runs now emit warning messages for observables whose estimated autocorrelation
+  time is large compared with the number of collected samples.
+- README dependency and citation references now point at the active HDF5 and
+  arXiv links.
+
+## Fixes
+
+- Fixed `get_bootstrap_statistics_fm()` so the bootstrap baseline includes all
+  measurements instead of starting the deterministic sum at the second sample.
+- Removed an unused `between_sample_count` variable from sample handling.
+
+## Performance And Internals
+
+- Added `SnapshotSpoolState` to manage temporary snapshot spool files and clean
+  them up automatically.
+- Reworked snapshot GraphML writing to transpose compact row-oriented snapshot
+  data through bounded-size temporary tiles before streaming edge histories.
+- Added a shared autocorrelation-time helper that emits threshold warnings for
+  sample and hysteresis result processing.
+- Removed acceptance-ratio vector allocation and appends from production
+  sampling.
+
+## Compatibility Notes
+
+- CLI options are unchanged.
+- Consumers that expected `Result.acc_ratio` from `get_sample()` production
+  runs should treat it as unavailable for those runs. `get_thermalization()`
+  continues to populate the acceptance-ratio series.
+- Snapshot saving now depends on the system temporary directory being writable
+  while GraphML output is produced.
+
+## Reference
+
+- Compared with `v1.0.1`: 10 commits.
+- Project-side changes excluding this changelog entry: 8 files changed,
+  331 insertions, 39 deletions.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.1...v1.0.2
+
 # ParaToric v1.0.1 Release Notes
 
 Release date: 2026-06-02
