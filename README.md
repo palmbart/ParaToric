@@ -11,7 +11,7 @@ ParaToric is a C++ package that implements a continuous-time quantum Monte Carlo
 where $`J, \lambda \geq 0`$ in the $`\hat{\sigma}^x`$-basis and $`\mu, h \geq 0`$ in the $`\hat{\sigma}^z`$-basis. The temperature $`T=1 / \beta`$ is finite. The algorithm is based on [Wu <em>et al.</em>, Phys. Rev. B <strong>85</strong>, 195104 (2012)][1]. We implement many lattice geometries, see [Usage](#usage).
 
 If you use ParaToric for a publication, please cite [
-https://doi.org/10.48550/arXiv.2510.14781][10].
+https://doi.org/10.48550/arXiv.2510.14781][8].
 
 Contents
 --------
@@ -30,7 +30,7 @@ Contents
 Dependencies
 ------------
 
-We require a C++ compiler (tested with GCC 15 and Clang 20) with C++23 support. Our implementation further requires the [Boost][3] (1.87 and above) and [HDF5][9] (1.14.3 and above) libraries. Refer to their website for installation instructions. 
+We require a C++ compiler (tested with GCC 15 and Clang 20) with C++23 support. Our implementation further requires the [Boost][3] (1.87 and above) and [HDF5][7] (1.14.3 and above) libraries. Refer to their website for installation instructions. 
 
 If you intend to use our Python scripts, you will need [NumPy][4], [matplotlib][5] and [h5py][6].
 
@@ -220,7 +220,5 @@ This research was funded by the European Research Council (ERC) under the Europe
 [4]: https://numpy.org/
 [5]: https://matplotlib.org/
 [6]: https://www.h5py.org/
-[7]: https://ctan.org/pkg/amsmath
-[8]: https://ctan.org/pkg/lm
-[9]: https://www.hdfgroup.org/solutions/hdf5/
-[10]: https://doi.org/10.48550/arXiv.2510.14781
+[7]: https://www.hdfgroup.org/solutions/hdf5/
+[8]: https://doi.org/10.48550/arXiv.2510.14781
