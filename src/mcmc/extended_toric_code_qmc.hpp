@@ -3002,12 +3002,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
     const auto between_sample_count = static_cast<size_t>(std::max(config.sim_spec.N_between_samples, 0));
     std::vector<std::vector< std::variant< std::complex<double>, double> >> observable_vector;
-    std::vector<double> acc_ratio_vector;
     observable_vector.reserve(config.sim_spec.observables.size());
-    const bool keep_acc_ratio_series = config.out_spec.full_time_series;
-    if (keep_acc_ratio_series) {
-        acc_ratio_vector.reserve(sample_count * between_sample_count);
-    }
     std::vector<double> observable_mean_vector(config.sim_spec.observables.size(), 0.), 
                         observable_std_vector(config.sim_spec.observables.size(), 0.), 
                         binder_mean_vector(config.sim_spec.observables.size(), 0.), 
@@ -3103,9 +3098,6 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
                 lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, config.param_spec.h, 
                 config.param_spec.mu, config.param_spec.J, config.param_spec.lmbda
             );
-            if (keep_acc_ratio_series) {
-                acc_ratio_vector.emplace_back(acc_ratio);
-            }
             if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                 // avoid accumulation of small numerical errors leading to bias
                 lat.init_potential_energy();
@@ -3262,7 +3254,6 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
 
     return Result{
         .series=std::move(observable_vector), 
-        .acc_ratio=std::move(acc_ratio_vector),
         .mean=std::move(observable_mean_vector), 
         .mean_std=std::move(observable_std_vector), 
         .binder=std::move(binder_mean_vector), 
