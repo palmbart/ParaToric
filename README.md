@@ -10,8 +10,7 @@ ParaToric is a C++ package that implements a continuous-time quantum Monte Carlo
 ```
 where $`J, \lambda \geq 0`$ in the $`\hat{\sigma}^x`$-basis and $`\mu, h \geq 0`$ in the $`\hat{\sigma}^z`$-basis. The temperature $`T=1 / \beta`$ is finite. The algorithm is based on [Wu <em>et al.</em>, Phys. Rev. B <strong>85</strong>, 195104 (2012)][1]. We implement many lattice geometries, see [Usage](#usage).
 
-If you use ParaToric for a publication, please cite [
-https://doi.org/10.48550/arXiv.2510.14781][8].
+If you use ParaToric for a publication, please cite [Linsel <em>et al.</em>, SciPost Phys. Codebases 75 (2026)][8], [Linsel <em>et al.</em>, SciPost Phys. Codebases 75-r1.0 (2026)][9], and the original algorithm paper [Wu <em>et al.</em>, Phys. Rev. B <strong>85</strong>, 195104 (2012)][1].
 
 Contents
 --------
@@ -221,4 +220,5 @@ This research was funded by the European Research Council (ERC) under the Europe
 [5]: https://matplotlib.org/
 [6]: https://www.h5py.org/
 [7]: https://www.hdfgroup.org/solutions/hdf5/
-[8]: https://doi.org/10.48550/arXiv.2510.14781
+[8]: https://doi.org/10.21468/SciPostPhysCodeb.75
+[9]: https://doi.org/10.21468/SciPostPhysCodeb.75-r1.0
