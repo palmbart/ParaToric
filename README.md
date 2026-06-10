@@ -8,7 +8,7 @@ ParaToric is a C++ package that implements a continuous-time quantum Monte Carlo
 ```math
 \hat{\mathcal{H}}_{\mathrm{eTC}} = \underbrace{- \mu \sum_+ \prod_{l \in +} \hat{\sigma}_l^x \; - J \sum_{\square} \prod_{l \in \square} \hat{\sigma}_l^z}_{\text{toric code } (\text{square lattice, } \mu=J=1)} \; \underbrace{- h \sum_{l} \hat{\sigma}_l^x \; - \lambda \sum_{l} \hat{\sigma}_l^z}_{\text{external fields}},
 ```
-where $`J, \lambda \geq 0`$ in the $`\hat{\sigma}^x`$-basis and $`\mu, h \geq 0`$ in the $`\hat{\sigma}^z`$-basis. The temperature $`T=1 / \beta`$ is finite. The algorithm is based on [Wu <em>et al.</em>, Phys. Rev. B <strong>85</strong>, 195104 (2012)][1]. We implement many lattice geometries, see [Usage](#usage).
+where $`J, \lambda \geq 0`$ in the $`\hat{\sigma}^x`$-basis and $`\mu, h \geq 0`$ in the $`\hat{\sigma}^z`$-basis. The temperature $`T=1 / \beta`$ is finite. We implement many lattice geometries, see [Usage](#usage).
 
 If you use ParaToric for a publication, please cite [Linsel <em>et al.</em>, SciPost Phys. Codebases 75 (2026)][8], [Linsel <em>et al.</em>, SciPost Phys. Codebases 75-r1.0 (2026)][9], and the original algorithm paper [Wu <em>et al.</em>, Phys. Rev. B <strong>85</strong>, 195104 (2012)][1].
 
