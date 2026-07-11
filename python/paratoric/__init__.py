@@ -3,19 +3,21 @@
 Paratoric Python bindings.
 
 Usage:
-    from paratoric import get_sample, get_thermalization, get_hysteresis
+    from paratoric import extended_toric_code, get_sample
 """
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 # Package version (when installed); fallback for dev checkouts.
 try:
     from ._paratoric import __version__ 
-except Exception:
+except (ImportError, OSError, AttributeError):
     try:
-        from importlib.metadata import version as _pkg_version
         __version__ = _pkg_version("paratoric")
-    except Exception:
+    except PackageNotFoundError:
         __version__ = "0+local"
 
 try:
@@ -36,9 +38,8 @@ except (ImportError, OSError) as _e:
     )
     # Optional: expose a lazy attribute loader instead of failing immediately
     def __getattr__(name: str):
-        if name in {"get_sample", "get_thermalization", "get_hysteresis"}:
+        if name in {"extended_toric_code", "get_sample", "get_thermalization", "get_hysteresis"}:
             raise ImportError(_HINT) from _CAUSE
         raise AttributeError(name)
 
     __all__ = ["__version__"]  # still allow reading version
-
