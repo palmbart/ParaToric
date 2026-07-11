@@ -5,12 +5,12 @@ from datetime import datetime
 from datetime import timedelta
 import h5py
 import logging
-from itertools import groupby
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
 #import numpy.typing as npt
 import os
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -134,18 +134,21 @@ class JobHandler:
                          'type': 'real',
                          'output_str': r'$\langle -J \; \sum_p \; B_p \rangle$',
                          'output_func': self._real_output}]
+        self.obs_by_name = {elem['name']: elem for elem in self.obs_dict}
         
     def __set_up_logging(self):
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
-        formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d - %(module)s - %(levelname)s - %(message)s',
-                                      datefmt='%Y-%m-%d %H:%M:%S')
 
-        console = logging.StreamHandler(stream=sys.stdout)
-        console.setLevel(logging.INFO)
-        console.flush = sys.stdout.flush
-        console.setFormatter(formatter)
-        logger.addHandler(console)
+        if not logger.handlers:
+            formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d - %(module)s - %(levelname)s - %(message)s',
+                                          datefmt='%Y-%m-%d %H:%M:%S')
+
+            console = logging.StreamHandler(stream=sys.stdout)
+            console.setLevel(logging.INFO)
+            console.flush = sys.stdout.flush
+            console.setFormatter(formatter)
+            logger.addHandler(console)
 
         self.log = logger
 
@@ -153,58 +156,53 @@ class JobHandler:
         self.lattice_params = kwargs
 
     def __get_observable_output_str(self, obs: str):
-        for elem in self.obs_dict:
-            if elem['name'] == obs:
-                return elem['output_str']
-        else:
-            self.log.info(f"The observable \"{obs}\" has not been found, returning \"{obs}\" as output string!")
-            return obs
+        elem = self.obs_by_name.get(obs)
+        if elem is not None:
+            return elem['output_str']
+        self.log.info(f"The observable \"{obs}\" has not been found, returning \"{obs}\" as output string!")
+        return obs
 
     def __get_observable_output_func(self, obs: str):
-        for elem in self.obs_dict:
-            if elem['name'] == obs:
-                return elem['output_func']
-        else:
-            self.log.info(f"The observable \"{obs}\" has not been found, returning self._real_output as output function!")
-            return self._real_output
+        elem = self.obs_by_name.get(obs)
+        if elem is not None:
+            return elem['output_func']
+        self.log.info(f"The observable \"{obs}\" has not been found, returning self._real_output as output function!")
+        return self._real_output
         
     def __get_observable_type(self, obs: str):
-        for elem in self.obs_dict:
-            if elem['name'] == obs:
-                return elem['type']
-        else:
-            self.log.info(f"The observable \"{obs}\" has not been found, returning \"real\" as output function!")
-            return 'real'
+        elem = self.obs_by_name.get(obs)
+        if elem is not None:
+            return elem['type']
+        self.log.info(f"The observable \"{obs}\" has not been found, returning \"real\" as output function!")
+        return 'real'
 
     def __dictionary_output(self, dictionary: dict):
-        out = ''
-        for key, value in dictionary.items():
-            out += f"{key}: {value}\n"
-        return out
+        return ''.join(f"{key}: {value}\n" for key, value in dictionary.items())
 
-    def __construct_output_directory(self, output_dir: str, name : str, begin_time: str, subpathname: str):
-        if output_dir == '':
-            if not os.path.exists('../out'):
-                os.mkdir('../out')
-            output_dir = './' + 'out'
-
-        outname = f"{name}_" + begin_time + "_" + uuid.uuid4().hex
-        if not os.path.exists(os.path.join(output_dir, subpathname)):
-            os.mkdir(os.path.join(output_dir, subpathname)) # Needed for macOS
-        os.mkdir(os.path.join(output_dir, subpathname, outname))
-        return os.path.join(output_dir, subpathname, outname)
+    def __construct_output_directory(self, output_dir: str | None, name: str, begin_time: str, subpathname: str):
+        base_dir = Path(output_dir or 'out')
+        outname = f"{name}_{begin_time}_{uuid.uuid4().hex}"
+        out_path = base_dir / subpathname / outname
+        out_path.mkdir(parents=True)
+        return str(out_path)
 
     def __get_datetime(self):
         return datetime.now().strftime('%d_%m_%Y-%H_%M_%S')
 
-    def __write_hdf5_file(self, dict: dict, path: str, filename: str = 'simulation_data.h5'):
-        hf = h5py.File(os.path.join(path, filename), 'w')
-        for key, value in dict.items():
-            hf.create_dataset(key, data=value, compression='gzip')
-        hf.close()
+    def __paratoric_executable(self):
+        return Path(__file__).resolve().parents[2] / 'bin' / 'paratoric'
+
+    def __run_paratoric(self, args: list):
+        command = [str(self.__paratoric_executable()), *map(str, args)]
+        subprocess.run(command, check=True)
+
+    def __write_hdf5_file(self, datasets: dict, path: str, filename: str = 'simulation_data.h5'):
+        with h5py.File(Path(path) / filename, 'w') as hf:
+            for key, value in datasets.items():
+                hf.create_dataset(key, data=value, compression='gzip')
 
     def __write_parameters_file(self, path: str, run_time: timedelta, begin_time: str, end_time: str, lattice_kwargs: dict, mc_kwargs):
-        with open(os.path.join(path, 'parameters.txt'), 'w') as text_file:
+        with (Path(path) / 'parameters.txt').open('w') as text_file:
             print(
                 f"The simulation parameters can be found here."
                 f"\n\nBegin: {begin_time}"
@@ -232,42 +230,51 @@ class JobHandler:
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
         boundaries = self.lattice_params['boundaries']
-        if save_snapshots:
-            save_snapshots_cpp = 1
-        else:
-            save_snapshots_cpp = 0
+        save_snapshots_cpp = int(save_snapshots)
         default_spin = self.lattice_params['default_spin']
 
-        obs_string = ' '.join(obs)
-
         folder_name = f"lattice={lattice_type}_bounds={boundaries}_basis={basis}_L={system_size}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_beta={beta}_{uuid.uuid4().hex}"
-        script_dir = os.path.dirname(__file__)               
-        project_root = os.path.dirname(os.path.dirname(script_dir))            
-        exe = os.path.join(project_root, "bin", "paratoric")
-        bashCommand = f"{exe} --simulation etc_thermalization --N_thermalization {N_thermalization} --beta {beta} --mu_constant {mu} --h_constant {h} --J_constant {J} --lmbda_constant {lmbda} --N_resamples {N_resamples} --observables {obs_string} --seed {seed} " \
-                      f"--basis {basis} --lattice_type {lattice_type} --system_size {system_size} --boundaries {boundaries} --default_spin {default_spin} " \
-                      f"--output_directory {output_dir} --folder_name {folder_name} --snapshots {save_snapshots_cpp} --process_index {process_index}"
-        subprocess.run(bashCommand.split(), check=True)
+        self.__run_paratoric([
+            '--simulation', 'etc_thermalization',
+            '--N_thermalization', N_thermalization,
+            '--beta', beta,
+            '--mu_constant', mu,
+            '--h_constant', h,
+            '--J_constant', J,
+            '--lmbda_constant', lmbda,
+            '--N_resamples', N_resamples,
+            '--observables', *obs,
+            '--seed', seed,
+            '--basis', basis,
+            '--lattice_type', lattice_type,
+            '--system_size', system_size,
+            '--boundaries', boundaries,
+            '--default_spin', default_spin,
+            '--output_directory', output_dir,
+            '--folder_name', folder_name,
+            '--snapshots', save_snapshots_cpp,
+            '--process_index', process_index,
+        ])
 
         # Here we expect that each observable in the hdf5 has the structure 'r', 'i' (real and imaginary part)
         result = []
-        with h5py.File(os.path.join(output_dir, folder_name, 'obs.h5'), "r") as f:
+        with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
             # acc_ratio is just a double and not complex
-            acc_ratio = np.array(list(f['simulation/results/acc_ratio']))
+            acc_ratio = np.asarray(f['simulation/results/acc_ratio'][()])
             
             for obs_name in obs:
                 if self.__get_observable_type(obs_name) in ["real", "complex"]:
                     raw = f[f"simulation/results/{obs_name}/series"][()] # this is a plain float64 array
                     # reinterpret as 16‑byte records with two float64 fields
-                    dt = np.dtype([('r','<f8'),('i','<f8')])
+                    dt = np.dtype([('r', '<f8'), ('i', '<f8')])
                     data_struct = raw.view('V16').view(dt)
                     r = data_struct['r']
                     i = data_struct['i']
                     result.append(r + 1j*i)
-        
+
         result = np.array(result, dtype=np.complex128)
 
-        sample_numbers = [i for i in range(acc_ratio.size)]
+        sample_numbers = list(range(acc_ratio.size))
         
         return sample_numbers, result, acc_ratio    
 
@@ -295,36 +302,45 @@ class JobHandler:
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
         boundaries = self.lattice_params['boundaries']
-        if save_snapshots:
-            save_snapshots_cpp = 1
-        else:
-            save_snapshots_cpp = 0
-        if full_time_series:
-            full_time_series_cpp = 1
-        else:
-            full_time_series_cpp = 0
+        save_snapshots_cpp = int(save_snapshots)
+        full_time_series_cpp = int(full_time_series)
         default_spin = self.lattice_params['default_spin']
 
-        obs_string = ' '.join(obs)
-
         folder_name = f"lattice={lattice_type}_bounds={boundaries}_basis={basis}_L={system_size}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_beta={beta}_{uuid.uuid4().hex}"
-        script_dir = os.path.dirname(__file__)               
-        project_root = os.path.dirname(os.path.dirname(script_dir))             
-        exe = os.path.join(project_root, "bin", "paratoric")
-
-        bashCommand = f"{exe} --simulation etc_sample --N_samples {N_samples} --N_thermalization {N_thermalization} --N_between_samples {N_between_samples} --beta {beta} " \
-                      f"--mu_constant {mu} --h_constant {h} --h_constant_therm {h_therm} --J_constant {J} --lmbda_constant {lmbda} --lmbda_constant_therm {lmbda_therm} " \
-                      f"--N_resamples {N_resamples} --custom_therm {custom_therm} --observables {obs_string} --seed {seed}  " \
-                      f"--basis {basis} --lattice_type {lattice_type} --system_size {system_size} --boundaries {boundaries} --default_spin {default_spin} " \
-                      f"--output_directory {output_dir} --folder_name {folder_name} --snapshots {save_snapshots_cpp} --full_time_series {full_time_series_cpp} --process_index {process_index}"
-        subprocess.run(bashCommand.split(), check=True)
+        self.__run_paratoric([
+            '--simulation', 'etc_sample',
+            '--N_samples', N_samples,
+            '--N_thermalization', N_thermalization,
+            '--N_between_samples', N_between_samples,
+            '--beta', beta,
+            '--mu_constant', mu,
+            '--h_constant', h,
+            '--h_constant_therm', h_therm,
+            '--J_constant', J,
+            '--lmbda_constant', lmbda,
+            '--lmbda_constant_therm', lmbda_therm,
+            '--N_resamples', N_resamples,
+            '--custom_therm', custom_therm,
+            '--observables', *obs,
+            '--seed', seed,
+            '--basis', basis,
+            '--lattice_type', lattice_type,
+            '--system_size', system_size,
+            '--boundaries', boundaries,
+            '--default_spin', default_spin,
+            '--output_directory', output_dir,
+            '--folder_name', folder_name,
+            '--snapshots', save_snapshots_cpp,
+            '--full_time_series', full_time_series_cpp,
+            '--process_index', process_index,
+        ])
 
         mean_list = []
         mean_error_list = []
         binder_list = []
         binder_error_list = []
         autocorrelation_time_list = []
-        with h5py.File(os.path.join(output_dir, folder_name, 'obs.h5'), "r") as f:
+        with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
             for obs_name in obs:
                 if self.__get_observable_type(obs_name) in ["real", "complex"]:
                     base = f[f"simulation/results/{obs_name}"]
@@ -370,30 +386,35 @@ class JobHandler:
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
         boundaries = self.lattice_params['boundaries']
-        if save_snapshots:
-            save_snapshots_cpp = 1
-        else:
-            save_snapshots_cpp = 0
-        if full_time_series:
-            full_time_series_cpp = 1
-        else:
-            full_time_series_cpp = 0
+        save_snapshots_cpp = int(save_snapshots)
+        full_time_series_cpp = int(full_time_series)
         default_spin = self.lattice_params['default_spin']
 
-        obs_string = ' '.join(obs)
-        h_hys_string = ' '.join([str(i) for i in h_hys])
-        lmbda_hys_string = ' '.join([str(i) for i in lmbda_hys])
-
         folder_names = [f"lattice={lattice_type}_bounds={boundaries}_basis={basis}_L={system_size}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_beta={beta}_{uuid.uuid4().hex}" for (h, lmbda) in zip(h_hys, lmbda_hys)]
-        folder_names_string = ' '.join(folder_names)
-        script_dir = os.path.dirname(__file__)               
-        project_root = os.path.dirname(os.path.dirname(script_dir))               
-        exe = os.path.join(project_root, "bin", "paratoric")
-        bashCommand = f"{exe} --simulation etc_hysteresis --N_samples {N_samples} --N_thermalization {N_thermalization} --N_between_samples {N_between_samples} " \
-                      f"--beta {beta} --mu_constant {mu} --h_hysteresis {h_hys_string} --J_constant {J} --lmbda_hysteresis {lmbda_hys_string} --N_resamples {N_resamples} --observables {obs_string} --seed {seed} " \
-                      f"--basis {basis} --lattice_type {lattice_type} --system_size {system_size} --boundaries {boundaries} --default_spin {default_spin} " \
-                      f"--output_directory {output_dir} --folder_names {folder_names_string} --snapshots {save_snapshots_cpp} --full_time_series {full_time_series_cpp} --process_index {process_index}"
-        subprocess.run(bashCommand.split(), check=True)
+        self.__run_paratoric([
+            '--simulation', 'etc_hysteresis',
+            '--N_samples', N_samples,
+            '--N_thermalization', N_thermalization,
+            '--N_between_samples', N_between_samples,
+            '--beta', beta,
+            '--mu_constant', mu,
+            '--h_hysteresis', *h_hys,
+            '--J_constant', J,
+            '--lmbda_hysteresis', *lmbda_hys,
+            '--N_resamples', N_resamples,
+            '--observables', *obs,
+            '--seed', seed,
+            '--basis', basis,
+            '--lattice_type', lattice_type,
+            '--system_size', system_size,
+            '--boundaries', boundaries,
+            '--default_spin', default_spin,
+            '--output_directory', output_dir,
+            '--folder_names', *folder_names,
+            '--snapshots', save_snapshots_cpp,
+            '--full_time_series', full_time_series_cpp,
+            '--process_index', process_index,
+        ])
 
         # Here we expect that each number in the hdf5 has the structure 'r', 'i' (real and imaginary part)
         mean_result_array = np.empty(shape=[len(h_hys), len(obs)], dtype=np.float64)
@@ -408,7 +429,7 @@ class JobHandler:
             binder_error_list = []
             autocorrelation_time_list = []
             
-            with h5py.File(os.path.join(output_dir, folder_name, 'obs.h5'), "r") as f:
+            with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
                 for obs_name in obs:
                     if self.__get_observable_type(obs_name) in ["real", "complex"]:
                         base = f[f"simulation/results/{obs_name}"]
@@ -693,8 +714,8 @@ class JobHandler:
         output_dir_t = os.path.join(output_dir, 'data')
         os.mkdir(output_dir_t)
         with mp.Pool(processes=processes) as pool:
-            arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, h_hys, J, lmbda_hys, N_resamples, output_dir_t, observables, seed, basis, save_snapshots, 0),
-                         (0, N_samples, N_thermalization, N_between_samples, beta, mu, h_hys[::-1], J, lmbda_hys[::-1], N_resamples, output_dir_t, observables, seed, basis, save_snapshots, 1)]
+            arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, h_hys, J, lmbda_hys, N_resamples, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0),
+                         (0, N_samples, N_thermalization, N_between_samples, beta, mu, h_hys[::-1], J, lmbda_hys[::-1], N_resamples, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 1)]
             [results_forward, results_backward] = pool.starmap(self._get_hysteresis_cpp, arguments, chunksize=1)
 
         results_forward = np.array(results_forward)
@@ -711,8 +732,8 @@ class JobHandler:
         ###############
 
         def all_equal(iterable):
-            g = groupby(iterable)
-            return next(g, True) and not next(g, False)
+            values = list(iterable)
+            return not values or all(value == values[0] for value in values[1:])
 
         sweep_params = {'N_samples': N_samples,
                         'N_thermalization': N_thermalization,
@@ -966,7 +987,7 @@ class JobHandler:
 
         output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_radius={radius}_Theta={Theta_lower}_to_{Theta_upper}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_circle_sweep')
 
-        angles_array = np.array([Theta_lower + (Theta_upper - Theta_lower)/Theta_steps * x for x in range(0, Theta_steps)])
+        angles_array = np.linspace(Theta_lower, Theta_upper, Theta_steps, endpoint=False)
 
         lambda_h_pair_array = np.array([(lmbda + np.cos(angle)*radius, h + np.sin(angle)*radius) for angle in angles_array])
 
@@ -1107,8 +1128,8 @@ class JobHandler:
         ax.grid(color='silver', linestyle='-', alpha=0.3)
         ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
         ax.set(yscale='log')
-        ax.set(xlabel='Monte Carlo update')
-        ax.set(ylabel='Monte Carlo acceptance ratios')
+        ax.set(xlabel='Update')
+        ax.set(ylabel='Acceptance ratios')
 
         fig.tight_layout()
         fig.savefig(os.path.join(output_dir, 'etc_thermalization_acc_ratio.pdf'))
@@ -1125,7 +1146,7 @@ class JobHandler:
                     ax.plot(step_array, obs_array[i].real, color='firebrick')
                     ax.grid(color='silver', linestyle='-', alpha=0.3)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
-                    ax.set(xlabel='Monte Carlo update')
+                    ax.set(xlabel='Update')
                     ax.set(ylabel=output_str)
 
                     fig.tight_layout()
@@ -1141,11 +1162,11 @@ class JobHandler:
                     ax2.yaxis.set_tick_params(direction='in', which='both')
                     fig.suptitle(f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax1.set(yscale='log')
-                    ax1.set(ylabel='Monte Carlo acceptance ratio')
+                    ax1.set(ylabel='Acceptance ratio')
                     ax1.grid(color='silver', linestyle='-', alpha=0.3)
                     ax1.plot(step_array, acc_ratio_array, color='navy')
 
-                    ax2.set(xlabel='Monte Carlo update')
+                    ax2.set(xlabel='Update')
                     ax2.set(ylabel=output_str)
                     ax2.grid(color='silver', linestyle='-', alpha=0.3)
                     ax2.plot(step_array, obs_array[i].real, color='firebrick')
@@ -1164,7 +1185,7 @@ class JobHandler:
                     ax.plot(step_array, obs_array[i].real, color='firebrick')
                     ax.grid(color='silver', linestyle='-', alpha=0.3)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
-                    ax.set(xlabel='Monte Carlo update')
+                    ax.set(xlabel='Update')
                     ax.set(ylabel=output_str+'_real')
 
                     fig.tight_layout()
@@ -1180,11 +1201,11 @@ class JobHandler:
                     ax2.yaxis.set_tick_params(direction='in', which='both')
                     fig.suptitle(f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax1.set(yscale='log')
-                    ax1.set(ylabel='Monte Carlo acceptance ratio')
+                    ax1.set(ylabel='Acceptance ratio')
                     ax1.grid(color='silver', linestyle='-', alpha=0.3)
                     ax1.plot(step_array, acc_ratio_array, color='navy')
 
-                    ax2.set(xlabel='Monte Carlo update')
+                    ax2.set(xlabel='Update')
                     ax2.set(ylabel=output_str+'_real')
                     ax2.grid(color='silver', linestyle='-', alpha=0.3)
                     ax2.plot(step_array, obs_array[i].real, color='firebrick')
@@ -1201,7 +1222,7 @@ class JobHandler:
                     ax.plot(step_array, obs_array[i].imag, color='firebrick')
                     ax.grid(color='silver', linestyle='-', alpha=0.3)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
-                    ax.set(xlabel='Monte Carlo update')
+                    ax.set(xlabel='Update')
                     ax.set(ylabel=output_str+'_imag')
 
                     fig.tight_layout()
@@ -1217,11 +1238,11 @@ class JobHandler:
                     ax2.yaxis.set_tick_params(direction='in', which='both')
                     fig.suptitle(f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax1.set(yscale='log')
-                    ax1.set(ylabel='Monte Carlo acceptance ratio')
+                    ax1.set(ylabel='Acceptance ratio')
                     ax1.grid(color='silver', linestyle='-', alpha=0.3)
                     ax1.plot(step_array, acc_ratio_array, color='navy')
 
-                    ax2.set(xlabel='Monte Carlo update')
+                    ax2.set(xlabel='Update')
                     ax2.set(ylabel=output_str+'_imag')
                     ax2.grid(color='silver', linestyle='-', alpha=0.3)
                     ax2.plot(step_array, obs_array[i].imag, color='firebrick')
