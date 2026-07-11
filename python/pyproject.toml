@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paratoric"
-version = "1.0.2"
-description = "ParaToric QMC python bindings"
+version = "1.0.3"
+description = "ParaToric QMC Python bindings"
 readme = "README.md"
 requires-python = ">=3.10"
 

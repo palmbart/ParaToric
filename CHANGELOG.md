@@ -1,3 +1,78 @@
+# ParaToric v1.0.3 Release Notes
+
+Release date: 2026-07-11
+
+v1.0.3 is a maintenance release over v1.0.2 focused on more reliable Python
+CLI behavior, corrected hysteresis output arguments, safer file and subprocess
+handling, and refreshed publication metadata.
+
+## Highlights
+
+- Fixed `python -m paratoric --help` and made help output available without
+  importing the simulation stack or requiring NumPy, h5py, or matplotlib.
+- Fixed hysteresis workers so `full_time_series` and `process_index` are passed
+  in the correct positions for both forward and backward sweeps.
+- Reworked Python subprocess invocation to use explicit argument lists, added
+  safer `pathlib.Path` output handling, and ensured HDF5 files are closed by
+  context managers.
+- Added constant-time observable metadata lookup and avoided duplicate logging
+  handlers when CLI components are initialized more than once.
+- Updated ParaToric publication information, README references, the project
+  DOI, and the copyright year.
+
+## User-Facing Changes
+
+- `python -m paratoric --help` now routes correctly to the CLI entry point.
+- Requesting CLI help no longer eagerly imports `JobHandler` and its scientific
+  Python dependencies.
+- Boolean CLI options now accept only `0` or `1` and are consistently converted
+  to booleans; list-valued options now have list-valued defaults.
+- Worker counts are consistently capped to the amount of available sweep work.
+- Thermalization plot axes now use the shorter labels "Update", "Acceptance
+  ratio", and "Acceptance ratios".
+
+## Fixes
+
+- Corrected `full_time_series` propagation through hysteresis execution and
+  fixed the accompanying worker argument ordering for `process_index`.
+- Removed the unsupported `custom_therm` argument from the hysteresis CLI call.
+- Narrowed Python package import exception handling so unexpected failures are
+  no longer silently treated as missing optional bindings.
+- Included `extended_toric_code` in the lazy missing-bindings error path.
+- Fixed default types for hysteresis fields and observables, and converted
+  `full_time_series` alongside the other integer-backed boolean CLI options.
+
+## Performance And Internals
+
+- Added a name-indexed observable dictionary to replace repeated linear scans.
+- Centralized executable discovery and subprocess execution, passing arguments
+  as lists rather than assembling and splitting shell-like command strings.
+- Switched output construction and HDF5 access to `pathlib.Path` and context
+  managers, including recursive parent-directory creation.
+- Simplified dictionary formatting, equality checks, numeric conversions, and
+  circle-sweep angle generation.
+- Prevented duplicate console handlers in both CLI and job-handler logging.
+
+## Documentation And Metadata
+
+- Added the ParaToric paper DOI and normalized README reference formatting.
+- Removed a duplicate README citation.
+- Updated ParaToric publication entries in the job-script notebook.
+- Extended the license copyright notice through 2026.
+
+## Compatibility Notes
+
+- CLI invocations that supplied values other than `0` or `1` for
+  `--custom_therm`, `--snapshots`, or `--full_time_series` are now rejected.
+- Simulation workflows and C++ interfaces are otherwise unchanged.
+
+## Reference
+
+- Compared with `v1.0.2`: 9 commits.
+- Project-side changes excluding this changelog entry: 9 files changed,
+  213 insertions, 190 deletions.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.2...v1.0.3
+
 # ParaToric v1.0.2 Release Notes
 
 Release date: 2026-06-10

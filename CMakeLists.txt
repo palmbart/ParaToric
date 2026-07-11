@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.23) # for FILE_SET
 project(paratoric
-  VERSION 1.0.2
+  VERSION 1.0.3
   LANGUAGES CXX C
 )
 
-set(PARATORIC_PRE_RELEASE "beta")  # or empty
+set(PARATORIC_PRE_RELEASE "")  # or empty
 
 # Compose full version
 set(PARATORIC_VERSION_FULL "${PROJECT_VERSION}")
