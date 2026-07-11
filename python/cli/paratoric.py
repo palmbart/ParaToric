@@ -3,36 +3,40 @@
 
 import argparse as ap
 import logging
+from math import pi
 import multiprocessing
-import numpy as np
 import sys
-
-from job_handler import JobHandler
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d - %(module)s - %(levelname)s - %(message)s',
-                              datefmt='%Y-%m-%d %H:%M:%S')
 
-console = logging.StreamHandler(stream=sys.stdout)
-console.setLevel(logging.INFO)
-console.flush = sys.stdout.flush
-console.setFormatter(formatter)
-logger.addHandler(console)
+if not logger.handlers:
+    formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d - %(module)s - %(levelname)s - %(message)s',
+                                  datefmt='%Y-%m-%d %H:%M:%S')
+
+    console = logging.StreamHandler(stream=sys.stdout)
+    console.setLevel(logging.INFO)
+    console.flush = sys.stdout.flush
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+
+
+def cap_processes(args, limit):
+    args['processes'] = min(args['processes'], limit)
 
 
 def main(args):
+    from job_handler import JobHandler
+
     lattice_params_list = ('lattice_type',
                            'system_size',
                            'boundaries',
                            'default_spin')
 
-    lattice_params = dict((k, args[k]) for k in lattice_params_list)
+    lattice_params = {k: args[k] for k in lattice_params_list}
 
     if args['simulation'] == 'etc_T_sweep':
-        if args['processes'] > args['T_steps']:
-            # Never spawn more workers than necessary
-            args['processes'] = args['T_steps']
+        cap_processes(args, args['T_steps'])
         job_handler = JobHandler()
         job_handler.etc_T_sweep(N_samples=args['N_samples'],
                                    N_thermalization=args['N_thermalization'],
@@ -58,9 +62,7 @@ def main(args):
                                    **lattice_params)
         
     elif args['simulation'] == 'etc_hysteresis':
-        if args['processes'] > 2:
-            # Never spawn more workers than necessary
-            args['processes'] = 2
+        cap_processes(args, 2)
         job_handler = JobHandler()
         job_handler.etc_hysteresis(N_samples=args['N_samples'],
                                       N_thermalization=args['N_thermalization'],
@@ -71,7 +73,6 @@ def main(args):
                                       J=args['J_constant'],
                                       lmbda_hys=args['lmbda_hysteresis'],
                                       N_resamples=args['N_resamples'],
-                                      custom_therm=args['custom_therm'],
                                       observables=args['observables'],
                                       seed=args['seed'],
                                       basis=args['basis'],
@@ -82,9 +83,7 @@ def main(args):
                                       **lattice_params)
 
     elif args['simulation'] == 'etc_h_sweep':
-        if args['processes'] > args['h_steps']:
-            # Never spawn more workers than necessary
-            args['processes'] = args['h_steps']
+        cap_processes(args, args['h_steps'])
         job_handler = JobHandler()
         job_handler.etc_h_sweep(N_samples=args['N_samples'],
                                    N_thermalization=args['N_thermalization'],
@@ -110,9 +109,7 @@ def main(args):
                                    **lattice_params)
 
     elif args['simulation'] == 'etc_lmbda_sweep':
-        if args['processes'] > args['lmbda_steps']:
-            # Never spawn more workers than necessary
-            args['processes'] = args['lmbda_steps']
+        cap_processes(args, args['lmbda_steps'])
         job_handler = JobHandler()
         job_handler.etc_lmbda_sweep(N_samples=args['N_samples'],
                                        N_thermalization=args['N_thermalization'],
@@ -138,9 +135,7 @@ def main(args):
                                        **lattice_params)
         
     elif args['simulation'] == 'etc_circle_sweep':
-        if args['processes'] > args['Theta_steps']:
-            # Never spawn more workers than necessary
-            args['processes'] = args['Theta_steps']
+        cap_processes(args, args['Theta_steps'])
         job_handler = JobHandler()
         job_handler.etc_circle_sweep(N_samples=args['N_samples'],
                                         N_thermalization=args['N_thermalization'],
@@ -165,9 +160,7 @@ def main(args):
                                         **lattice_params)
 
     elif args['simulation'] == 'etc_thermalization':
-        if args['processes'] > args['repetitions']:
-            # Never spawn more workers than necessary
-            args['processes'] = args['repetitions']
+        cap_processes(args, args['repetitions'])
         job_handler = JobHandler()
         job_handler.etc_thermalization(N_thermalization=args['N_thermalization'],
                                           repetitions=args['repetitions'],
@@ -186,7 +179,7 @@ def main(args):
                                           **lattice_params)
     
     else:
-        raise ValueError('The simulation "' + args['simulation'] + '" does not exist.')
+        raise ValueError(f'The simulation "{args["simulation"]}" does not exist.')
 
 
 if __name__ == '__main__':
@@ -238,7 +231,7 @@ if __name__ == '__main__':
                           type=float, default=0.)
     mc_group.add_argument('-hhys', '--h_hysteresis', nargs='+',
                           help='Hysteresis value of the constant h (electric field term).', 
-                          type=float, default=0.)
+                          type=float, default=[0.])
     mc_group.add_argument('-hct', '--h_constant_therm', 
                           help='Value of the constant h for thermalization (electric field term).', 
                           type=float, default=0.)
@@ -256,7 +249,7 @@ if __name__ == '__main__':
                           type=float, default=0.)
     mc_group.add_argument('-lmbdahys', '--lmbda_hysteresis', nargs='+',
                           help='Hysteresis value of the constant lmbda (gauge field term).', 
-                          type=float, default=0.)
+                          type=float, default=[0.])
     mc_group.add_argument('-lmbdact', '--lmbda_constant_therm',
                           help='Value of the constant lmbda for thermalization (gauge field term).',
                           type=float, default=0.)
@@ -277,7 +270,7 @@ if __name__ == '__main__':
                           type=float, default=0.)
     mc_group.add_argument('-Thu', '--Theta_upper',
                           help='Upper limit of Theta.',
-                          type=float, default=2*np.pi)
+                          type=float, default=2*pi)
     mc_group.add_argument('-Ths', '--Theta_steps',
                           help='Number of Theta steps.',
                           type=int, default=15)
@@ -286,10 +279,10 @@ if __name__ == '__main__':
                           type=int, default=1000)
     mc_group.add_argument('-cth', '--custom_therm', 
                           help='Whether custom thermalization is used (to probe hysteresis).', 
-                          type=int, default=0)
+                          type=int, default=0, choices=[0, 1])
     mc_group.add_argument('-obs', '--observables', nargs='+',
                           help='Observables that are measured.',
-                          type=str, default='energy')
+                          type=str, default=['energy'])
     mc_group.add_argument('-s', '--seed', 
                           help='Seed for the pseudorandom number generator.', 
                           type=int, default=0)
@@ -301,10 +294,10 @@ if __name__ == '__main__':
                           type=str, default=None)
     mc_group.add_argument('-snap', '--snapshots',
                           help='Whether snapshots should be saved.',
-                          type=int, default=0)
+                          type=int, default=0, choices=[0, 1])
     mc_group.add_argument('-fts', '--full_time_series',
                           help='Whether full time series should be saved.',
-                          type=int, default=0)
+                          type=int, default=0, choices=[0, 1])
     mc_group.add_argument('-proc', '--processes',
                           help='Number of processes. "0" will use all available cores. Negative numbers "-x" will use all available cores minus x.',
                           type=int, default=-4)
@@ -326,15 +319,9 @@ if __name__ == '__main__':
 
     args = vars(parser.parse_args())
 
-    if args['custom_therm'] == 0:
-        args['custom_therm'] = False
-    else:
-        args['custom_therm'] = True
-
-    if args['snapshots'] == 0:
-        args['snapshots'] = False
-    else:
-        args['snapshots'] = True
+    args['custom_therm'] = bool(args['custom_therm'])
+    args['snapshots'] = bool(args['snapshots'])
+    args['full_time_series'] = bool(args['full_time_series'])
 
     logical_cpu_core_count = multiprocessing.cpu_count()
 
