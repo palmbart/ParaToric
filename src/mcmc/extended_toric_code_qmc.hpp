@@ -335,6 +335,7 @@ class ExtendedToricCodeQMC {
             if constexpr (Basis == 'x') {
                 return lat.get_diag_single_energy()/static_cast<double>(lat.get_edge_count()); 
             } else {
+                if (h == 0.) return 0.;
                 return lat.get_non_diag_single_energy_z()/static_cast<double>(lat.get_edge_count() * h);
             }
         };
@@ -351,17 +352,23 @@ class ExtendedToricCodeQMC {
         sigma_x_dynamical_susceptibility_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             lat.rotate_imag_time();
-            if constexpr (Basis == 'x') return lat.get_diag_dynamical_M_M();
-            else return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2) * h);
+            if constexpr (Basis == 'x') {
+                return lat.get_diag_dynamical_M_M();
+            } else {
+                if (h == 0.) return std::complex<double>{};
+                return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2) * h);
+            }
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
         sigma_z_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
-            if constexpr (Basis == 'x') 
+            if constexpr (Basis == 'x') {
+                if (lmbda == 0.) return 0.;
                 return lat.get_non_diag_single_energy_x()/static_cast<double>(lat.get_edge_count() * lmbda); 
-            else 
+            } else {
                 return (lat.get_diag_single_energy()/static_cast<double>(lat.get_edge_count()));
+            }
         };
 
         std::function<std::complex<double>(Lattice&, double, double, double, double)> 
@@ -376,38 +383,52 @@ class ExtendedToricCodeQMC {
         sigma_z_dynamical_susceptibility_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             lat.rotate_imag_time();
-            if constexpr (Basis == 'x') 
+            if constexpr (Basis == 'x') {
+                if (lmbda == 0.) return std::complex<double>{};
                 return lat.get_kL_kR_single() / static_cast<double>(std::sqrt(2) * lmbda);
-            else 
+            } else {
                 return lat.get_diag_dynamical_M_M();
+            }
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
         star_x_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
-            if constexpr (Basis == 'x') 
+            if constexpr (Basis == 'x') {
                 return lat.get_diag_tuple_energy_x()/static_cast<double>(lat.get_vertex_count()); 
-            else 
+            } else {
+                if (mu == 0.) return 0.;
                 return lat.get_non_diag_tuple_energy_z()/static_cast<double>(lat.get_vertex_count() * mu);
+            }
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
         plaquette_z_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
-            if constexpr (Basis == 'x') 
+            if constexpr (Basis == 'x') {
+                if (J == 0.) return 0.;
                 return lat.get_non_diag_tuple_energy_x()/static_cast<double>(lat.get_plaquette_count() * J); 
-            else 
+            } else {
                 return lat.get_diag_tuple_energy_z()/static_cast<double>(lat.get_plaquette_count());
+            }
         };
 
         std::function<double(Lattice&, double, double, double, double)> 
         delta_obs = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
             if constexpr (Basis == 'x') {
-                return - lat.get_diag_tuple_energy_x()/static_cast<double>(lat.get_vertex_count()) 
-                + lat.get_non_diag_tuple_energy_x()/static_cast<double>(lat.get_plaquette_count() * J); 
+                const double star_x = lat.get_diag_tuple_energy_x()
+                    / static_cast<double>(lat.get_vertex_count());
+                if (J == 0.) return -star_x;
+                const double plaquette_z = lat.get_non_diag_tuple_energy_x()
+                    / static_cast<double>(lat.get_plaquette_count() * J);
+                return plaquette_z - star_x;
             } else {
-                return - lat.get_non_diag_tuple_energy_z()/static_cast<double>(lat.get_vertex_count() * mu) 
-                + lat.get_diag_tuple_energy_z()/static_cast<double>(lat.get_plaquette_count());
+                const double plaquette_z = lat.get_diag_tuple_energy_z()
+                    / static_cast<double>(lat.get_plaquette_count());
+                if (mu == 0.) return plaquette_z;
+                const double star_x = lat.get_non_diag_tuple_energy_z()
+                    / static_cast<double>(lat.get_vertex_count() * mu);
+                return plaquette_z - star_x;
             }
         };
 
