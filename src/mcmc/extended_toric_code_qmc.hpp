@@ -2202,7 +2202,9 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 
         const double imag_time_tuple_flip = tuple_flips[random_tuple_flip_index];
 
-        const auto [tau_left, tau_right] = lat.tuple_flip_window(tuple_edges, imag_time_tuple_flip);
+        SmallIndexVector edge_flip_indices;
+        const auto [tau_left, tau_right] =
+            lat.tuple_flip_window(tuple_edges, imag_time_tuple_flip, &edge_flip_indices);
 
 #ifndef NDEBUG
         BOOST_LOG_TRIVIAL(debug) << std::format("ropolis_step_single_tuple_flip_move --- Imaginary time of random tuple flip: {}; tau_left: {}; tau_right: {}", imag_time_tuple_flip, tau_left, tau_right);
@@ -2255,7 +2257,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
-                    lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true);
+                    lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true,
+                                        edge_flip_indices, random_tuple_flip_index);
                     integrated_pot_energy += integrated_pot_energy_diff;
                     for (size_t i = 0; i < tuple_edges.size(); ++i) {
                         lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);
@@ -2299,7 +2302,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
-                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true);
+                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true,
+                                            edge_flip_indices, random_tuple_flip_index);
                         integrated_pot_energy += integrated_pot_energy_diff;
                         for (size_t i = 0; i < tuple_edges.size(); ++i) {
                             lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);
@@ -2321,7 +2325,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
-                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true);
+                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true,
+                                            edge_flip_indices, random_tuple_flip_index);
                         integrated_pot_energy += integrated_pot_energy_diff;
                         for (size_t i = 0; i < tuple_edges.size(); ++i) {
                             lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);
@@ -2358,7 +2363,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         for (const auto& p_edg : tuple_edges) {
                             lat.flip_spin(p_edg);
                         }
-                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, false);
+                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, false,
+                                            edge_flip_indices, random_tuple_flip_index);
                         integrated_pot_energy += integrated_pot_energy_diff;
                         for (size_t i = 0; i < tuple_edges.size(); ++i) {
                             lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);
@@ -2383,7 +2389,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
-                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true);
+                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true,
+                                            edge_flip_indices, random_tuple_flip_index);
                         integrated_pot_energy += integrated_pot_energy_diff;
                         for (size_t i = 0; i < tuple_edges.size(); ++i) {
                             lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);
@@ -2406,7 +2413,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                         BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- ACCEPTED.";
 #endif  
-                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true);
+                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, true,
+                                            edge_flip_indices, random_tuple_flip_index);
                         integrated_pot_energy += integrated_pot_energy_diff;
                         for (size_t i = 0; i < tuple_edges.size(); ++i) {
                             lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);
@@ -2443,7 +2451,8 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         for (const auto& p_edg : tuple_edges) {
                             lat.flip_spin(p_edg);
                         }
-                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, false);
+                        lat.move_tuple_flip(random_tuple, tuple_edges, imag_time_tuple_flip, new_imag_time, false,
+                                            edge_flip_indices, random_tuple_flip_index);
                         integrated_pot_energy += integrated_pot_energy_diff;
                         for (size_t i = 0; i < tuple_edges.size(); ++i) {
                             lat.add_potential_edge_energy(tuple_edges[i], pot_energy_diffs[i]);

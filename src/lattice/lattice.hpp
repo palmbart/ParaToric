@@ -430,7 +430,11 @@ public:
      */
     std::vector<double> flip_next_imag_times_tuple(std::span<const Edge> tuple_edges, double tau);
     SmallEnergyVector flip_next_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau);
-    std::pair<double, double> tuple_flip_window(std::span<const Edge> tuple_edges, double tau);
+    std::pair<double, double> tuple_flip_window(
+        std::span<const Edge> tuple_edges,
+        double tau,
+        SmallIndexVector* flip_indices = nullptr
+    );
 
     /**
      * @brief Calculates the imaginary time of the previous spin flip (of any type) before tau at the edge edg. 
@@ -521,6 +525,8 @@ public:
      * @param tau_old the (old) imaginary time of the tuple flip before the move
      * @param tau_new the (new) imaginary time of the tuple flip after the move
      * @param no_move_over_beta if the move is going over beta (false) or not (true) 
+     * @param edge_flip_indices optional precomputed position of the tuple flip on each edge
+     * @param tuple_flip_index optional precomputed position in the tuple's own flip vector
      * 
      */
     void move_tuple_flip(
@@ -528,7 +534,9 @@ public:
         std::span<const Edge> tuple_edges, 
         double tau_old, 
         double tau_new, 
-        bool no_move_over_beta
+        bool no_move_over_beta,
+        std::span<const int> edge_flip_indices = {},
+        int tuple_flip_index = -1
     );
 
     /**

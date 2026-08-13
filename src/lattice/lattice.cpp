@@ -2109,7 +2109,6 @@ void Lattice::delete_double_single_spin_flip(const Edge& edg,
     auto it_1 = std::prev(r_it.base());
     spin_flips.erase(it_1);
 
-
     auto& single_spin_flips = g[edg].single_spin_flips;
     auto it_s_2 = std::lower_bound(single_spin_flips.begin(), single_spin_flips.end(), imag_time_next_single_spin_flip);
 
@@ -2160,7 +2159,7 @@ void Lattice::delete_double_tuple_flip(
         } else [[unlikely]] {
             throw std::runtime_error(std::format("delete_double_tuple_flip: There is no spin flip at {}.", imag_time_next_tuple_flip));
         }
-        
+
         auto r_it = std::find(std::make_reverse_iterator(it_2), spin_flips.rend(), imag_time_tuple_flip);
         if (r_it == spin_flips.rend()) [[unlikely]] {
             throw std::runtime_error(std::format("delete_double_tuple_flip: There is no spin flip at {}.", imag_time_tuple_flip));
@@ -2178,7 +2177,7 @@ void Lattice::delete_double_tuple_flip(
         } else [[unlikely]] {
             throw std::runtime_error(std::format("delete_double_tuple_flip: There is no spin flip at {}.", imag_time_next_tuple_flip));
         }
-        
+
         auto r_it = std::find(std::make_reverse_iterator(it_2), tuple_spin_flips.rend(), imag_time_tuple_flip);
         if (r_it == tuple_spin_flips.rend()) [[unlikely]] {
             throw std::runtime_error(std::format("delete_double_tuple_flip: There is no spin flip at {}.", imag_time_tuple_flip));
@@ -2194,7 +2193,7 @@ void Lattice::delete_double_tuple_flip(
         } else [[unlikely]] {
             throw std::runtime_error(std::format("delete_double_tuple_flip: There is no spin flip at {}.", imag_time_next_tuple_flip));
         }
-        
+
         auto r_it = std::find(std::make_reverse_iterator(it_2), tuple_spin_flips.rend(), imag_time_tuple_flip);
         if (r_it == tuple_spin_flips.rend()) [[unlikely]] {
             throw std::runtime_error(std::format("delete_double_tuple_flip: There is no spin flip at {}.", imag_time_tuple_flip));
@@ -2330,10 +2329,18 @@ Lattice::SmallEnergyVector Lattice::flip_prev_imag_times_tuple_small(std::span<c
     return imag_times;
 }
 
-std::pair<double, double> Lattice::tuple_flip_window(std::span<const Edge> tuple_edges, double tau) {
+std::pair<double, double> Lattice::tuple_flip_window(
+    std::span<const Edge> tuple_edges,
+    double tau,
+    SmallIndexVector* flip_indices
+) {
     bool initialized = false;
     double tau_left = tau;
     double tau_right = tau;
+    if (flip_indices != nullptr) {
+        flip_indices->clear();
+        flip_indices->reserve(tuple_edges.size());
+    }
 
     for (const Edge& edg : tuple_edges) {
         const auto& spin_flips = g[edg].spin_flips;
@@ -2343,6 +2350,10 @@ std::pair<double, double> Lattice::tuple_flip_window(std::span<const Edge> tuple
         if (!spin_flips.empty()) [[likely]] {
             const auto lower = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau);
             const auto upper = std::upper_bound(lower, spin_flips.end(), tau);
+
+            if (flip_indices != nullptr) {
+                flip_indices->emplace_back(static_cast<int>(lower - spin_flips.begin()));
+            }
 
             next = (upper != spin_flips.end()) ? *upper : spin_flips.front();
             if (next < tau) {
@@ -2381,7 +2392,6 @@ void Lattice::insert_double_single_spin_flip(const Edge& edg, double tau_left, d
         auto it_right = std::upper_bound(spin_flips.begin(), spin_flips.end(), tau_right);
         it_right = spin_flips.insert(it_right, tau_right);
 
-        // Find insertion point for tau_left in [spin_flips.begin(), it_right)
         auto it_left = std::lower_bound(spin_flips.begin(), it_right, tau_left);
         spin_flips.insert(it_left, tau_left);
     }
@@ -2532,19 +2542,25 @@ void Lattice::move_tuple_flip(
     std::span<const Edge> tuple_edges, 
     double tau_old, 
     double tau_new, 
-    bool no_move_over_beta
+    bool no_move_over_beta,
+    std::span<const int> edge_flip_indices,
+    int tuple_flip_index
 ) {
-    for (const Edge& edg : tuple_edges) {
-        const auto& spin_flips = g[edg].spin_flips;
-        const auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau_old);
-        int index = -1;
-        if (it != spin_flips.end()) [[likely]] {
-            index = it - spin_flips.begin(); // TODO does not need the index, only whether its 0 or not
-        } 
+    if (!edge_flip_indices.empty() && edge_flip_indices.size() != tuple_edges.size()) [[unlikely]] {
+        throw std::invalid_argument(
+            "move_tuple_flip: edge_flip_indices and tuple_edges must have equal sizes."
+        );
+    }
+
+    for (size_t i = 0; i < tuple_edges.size(); ++i) {
+        const Edge& edg = tuple_edges[i];
+        auto& spin_flips = g[edg].spin_flips;
+        const int index = edge_flip_indices.empty()
+            ? static_cast<int>(std::lower_bound(spin_flips.begin(), spin_flips.end(), tau_old) - spin_flips.begin())
+            : edge_flip_indices[i];
         if (no_move_over_beta) [[likely]] {
-            set_spin_flip_imag_time(edg, index, tau_new);
+            spin_flips[index] = tau_new;
         } else [[unlikely]] {
-            auto& spin_flips = g[edg].spin_flips;
             if (index == 0) { // rotate to the left 
                 *spin_flips.begin() = tau_new;
                 std::rotate(spin_flips.begin(), spin_flips.begin() + 1, spin_flips.end());
@@ -2557,11 +2573,9 @@ void Lattice::move_tuple_flip(
 
     if (BASIS == 'x') {
         auto& tuple_spin_flips = plaquette_flip_vector[tuple_index];
-        const auto it_tuple = std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old);
-        int index = -1;
-        if (it_tuple != tuple_spin_flips.end()) [[likely]] {
-            index = it_tuple - tuple_spin_flips.begin(); // TODO does not need the index, only whether its 0 or not
-        } 
+        const int index = tuple_flip_index >= 0
+            ? tuple_flip_index
+            : static_cast<int>(std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old) - tuple_spin_flips.begin());
         if (no_move_over_beta) [[likely]] {
             tuple_spin_flips[index] = tau_new;
         } else [[unlikely]] {
@@ -2575,11 +2589,9 @@ void Lattice::move_tuple_flip(
         } 
     } else {
         auto& tuple_spin_flips = g[tuple_index].star_flips;
-        const auto it_tuple = std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old);
-        int index = -1;
-        if (it_tuple != tuple_spin_flips.end()) [[likely]] {
-            index = it_tuple - tuple_spin_flips.begin(); // TODO does not need the index, only whether its 0 or not
-        } 
+        const int index = tuple_flip_index >= 0
+            ? tuple_flip_index
+            : static_cast<int>(std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old) - tuple_spin_flips.begin());
         if (no_move_over_beta) [[likely]] {
             tuple_spin_flips[index] = tau_new;
         } else [[unlikely]] {
