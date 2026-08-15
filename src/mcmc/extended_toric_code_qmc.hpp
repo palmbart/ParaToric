@@ -516,6 +516,11 @@ class ExtendedToricCodeQMC {
             return ratio >= 1.0 || uniform_dist(*rng) < ratio;
         }
 
+        static double boltzmann_weight(double energy_diff) {
+            if (energy_diff == 0.) return 1.;
+            return std::exp(-energy_diff);
+        }
+
         static double calculate_autocorrelation_time_with_warning(
             const std::vector<double>& obs_real,
             const std::string& observable_name,
@@ -541,6 +546,19 @@ class ExtendedToricCodeQMC {
         static double total_integrated_pot_energy(Lattice& lat, double h, double mu, double J, double lmbda);
 
         /**
+         * @brief Rebuild all bare-energy caches after a parameter stage and
+         *        synchronize the coupled integrated potential energy.
+         *
+         * Bare-energy cache updates may be skipped while their coupling is
+         * zero. Every workflow that changes couplings must call this method
+         * before starting the next Metropolis stage.
+         */
+        static void reinitialize_potential_energy(
+            Lattice& lat, double& integrated_pot_energy,
+            double h, double mu, double J, double lmbda
+        );
+
+        /**
          * @brief Return the potential EDGE energy DIFFERENCE (integrated over imaginary time) when flipping the spin between imag_time_spin_flip and imag_time_next_spin_flip 
          * on the edge between vertices source_v and target_v on the lattice lat.
          * 
@@ -561,6 +579,11 @@ class ExtendedToricCodeQMC {
          *                                 Do not set for partial intervals.
          * 
          * @return the integrated potential energy difference
+         *
+         * @note If the active edge coupling is zero (@p h in the x-basis or
+         *       @p lmbda in the z-basis), both returned values are zero and
+         *       the bare-energy calculation is skipped. The cache is rebuilt
+         *       by reinitialize_potential_energy() before a later parameter stage.
          * 
          */
         static std::tuple<double, double> 
@@ -612,6 +635,9 @@ class ExtendedToricCodeQMC {
          * @pre @p imag_time_next_spin_flip > @p imag_time_spin_flip. Interval must be non-zero.
          * @note Per-tuple values are bare; apply couplings only when forming totals or acceptance ratios.
          *       The order of indices matches the lattice adjacency.
+         * @note If the active tuple coupling is zero (@p mu in the x-basis or
+         *       @p J in the z-basis), the calculation is skipped and the
+         *       returned index and difference vectors are empty.
          */
         static std::tuple<double, SmallIndexVector, SmallEnergyVector> 
         integrated_pot_energy_diff_single_spin_flip_tuple(
@@ -656,6 +682,8 @@ class ExtendedToricCodeQMC {
          *
          * @pre @p imag_time_next_spin_flip > @p imag_time_spin_flip (non-zero interval).
          * @note Per-edge values are bare; apply couplings only when forming totals or acceptance ratios.
+         * @note If the active edge coupling is zero, the calculation is skipped
+         *       and the returned difference vector contains one zero per edge.
          * @note The second return component mirrors the input edges by value; consider
          *       using a view/reference in hot paths to avoid copies.
          */
@@ -709,6 +737,8 @@ class ExtendedToricCodeQMC {
          * @pre @p imag_time_spin_flips.size() == @p tuple_edges.size().
          *
          * @note Per–edge values are **bare**; couplings are applied only to the scalar sum.
+         * @note If the active edge coupling is zero, the calculation is skipped
+         *       and the returned difference vector contains one zero per edge.
          * @note The local schedule per edge is {(@p imag_time_tuple_flip, tuple), (@p imag_time_spin_flips[i], single)}.
          *       Equal–time flips are combined by parity; order does not affect the integral.
          * @note The parameters @p create_vector and @p tuple_destroy are accepted for interface
@@ -771,6 +801,8 @@ class ExtendedToricCodeQMC {
          *
          * @note “Bare” means couplings are NOT applied to the per-tuple values.
          *       Couplings are applied only to the returned scalar @c delta.
+         * @note If the active tuple coupling is zero, the calculation is skipped
+         *       and the returned index and difference vectors are empty.
          * @note Equal-time flips are combined by parity; their order does not affect the integral.
          */
         static std::tuple<double, SmallIndexVector, SmallEnergyVector> 
@@ -1041,13 +1073,32 @@ requires ValidBasis<Basis>
 double ExtendedToricCodeQMC<Basis>::total_integrated_pot_energy(
     Lattice& lat, double h, double mu, double J, double lmbda
 ) {
-    double integrated_potential_energy = 0.;
     if constexpr (Basis == 'x') {
-        integrated_potential_energy = - lat.total_integrated_edge_energy() * h - lat.total_integrated_star_energy() * mu;
+        if (h == 0.) {
+            if (mu == 0.) return 0.;
+            return -lat.total_integrated_star_energy() * mu;
+        }
+        if (mu == 0.) return -lat.total_integrated_edge_energy() * h;
+        return -lat.total_integrated_edge_energy() * h - lat.total_integrated_star_energy() * mu;
     } else if constexpr (Basis == 'z') {
-        integrated_potential_energy = - lat.total_integrated_edge_energy() * lmbda - lat.total_integrated_plaquette_energy() * J;
+        if (lmbda == 0.) {
+            if (J == 0.) return 0.;
+            return -lat.total_integrated_plaquette_energy() * J;
+        }
+        if (J == 0.) return -lat.total_integrated_edge_energy() * lmbda;
+        return -lat.total_integrated_edge_energy() * lmbda - lat.total_integrated_plaquette_energy() * J;
     }
-    return integrated_potential_energy;
+}
+
+template<char Basis>
+requires ValidBasis<Basis>
+void ExtendedToricCodeQMC<Basis>::reinitialize_potential_energy(
+    Lattice& lat, double& integrated_pot_energy,
+    double h, double mu, double J, double lmbda
+) {
+    lat.init_potential_energy();
+    lat.rotate_imag_time();
+    integrated_pot_energy = total_integrated_pot_energy(lat, h, mu, J, lmbda);
 }
 
 template<char Basis>
@@ -1058,6 +1109,14 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_edge(
     const Lattice::Edge& edg, double imag_time_spin_flip, double imag_time_next_spin_flip, 
     bool total_cache
 ) {
+    // Disabled terms need neither an acceptance contribution nor a cache update.
+    // Parameter-changing workflows rebuild the cache before re-enabling them.
+    if constexpr (Basis == 'x') {
+        if (h == 0.) return {0., 0.};
+    } else if constexpr (Basis == 'z') {
+        if (lmbda == 0.) return {0., 0.};
+    }
+
     double delta_energy_single = 0.;
     double bare_energy_single = 0.;
     if (total_cache) {
@@ -1084,13 +1143,17 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_tuple(
     bool total_cache
 ) {
     double delta_energy_tuple = 0.;
+    // Disabled terms need neither an acceptance contribution nor a cache update.
+    // Parameter-changing workflows rebuild the cache before re-enabling them.
     if constexpr (Basis == 'x') {
+        if (mu == 0.) return {0., SmallIndexVector{}, SmallEnergyVector{}};
         const auto& [bare_energy, star_centers, bare_star_potential_energy_diffs] 
         = lat.integrated_star_energy_diff(edg, imag_time_spin_flip, imag_time_next_spin_flip, total_cache);
         delta_energy_tuple = -mu * bare_energy; // No "/ 2"!
         //for (double& x : bare_star_potential_energy_diffs) x *= -mu;
         return {delta_energy_tuple, std::move(star_centers), std::move(bare_star_potential_energy_diffs)};
     } else if constexpr (Basis == 'z') {
+        if (J == 0.) return {0., SmallIndexVector{}, SmallEnergyVector{}};
         const auto& [bare_energy, plaquette_indices, bare_plaquette_potential_energy_diffs] 
         = lat.integrated_plaquette_energy_diff(edg, imag_time_spin_flip, imag_time_next_spin_flip, total_cache);
         delta_energy_tuple = -J * bare_energy; // No "/ 2"!
@@ -1113,6 +1176,13 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     UNUSED(tuple_index);
     UNUSED(mu);
     UNUSED(J);
+    // Keep a correctly-sized zero delta vector for accepted tuple updates.
+    if constexpr (Basis == 'x') {
+        if (h == 0.) return {0., tuple_edges, SmallEnergyVector(tuple_edges.size(), 0.)};
+    } else if constexpr (Basis == 'z') {
+        if (lmbda == 0.) return {0., tuple_edges, SmallEnergyVector(tuple_edges.size(), 0.)};
+    }
+
     double delta_energy_single = 0.;
     SmallEnergyVector bare_energy_single_vector;
     bare_energy_single_vector.reserve(tuple_edges.size());
@@ -1148,6 +1218,13 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_edge(
     double tau_left, double tau_right, 
     const SmallBoolVector& create_vector, bool tuple_destroy
 ) {
+    // Keep a correctly-sized zero delta vector for accepted combination updates.
+    if constexpr (Basis == 'x') {
+        if (h == 0.) return {0., tuple_edges, SmallEnergyVector(tuple_edges.size(), 0.)};
+    } else if constexpr (Basis == 'z') {
+        if (lmbda == 0.) return {0., tuple_edges, SmallEnergyVector(tuple_edges.size(), 0.)};
+    }
+
     double energy_single_diff = 0.; 
     SmallEnergyVector bare_energy_single_vector;
     bare_energy_single_vector.reserve(tuple_edges.size());
@@ -1183,7 +1260,9 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_tuple(
     const SmallBoolVector& create_vector, bool tuple_destroy
 ) {
     double energy_tuple_diff = 0.; 
+    // Disabled terms need neither an acceptance contribution nor a cache update.
     if constexpr (Basis == 'x') {
+        if (mu == 0.) return {0., SmallIndexVector{}, SmallEnergyVector{}};
         const auto& [bare_energy, star_centers, bare_star_potential_energy_diffs] 
         = lat.integrated_star_energy_diff_combination(
             tuple_index, tau_left, tau_right, 
@@ -1193,6 +1272,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_tuple(
         energy_tuple_diff += -mu * bare_energy;
         return {energy_tuple_diff, std::move(star_centers), std::move(bare_star_potential_energy_diffs)};
     }  else if constexpr (Basis == 'z') {
+        if (J == 0.) return {0., SmallIndexVector{}, SmallEnergyVector{}};
         const auto& [bare_energy, plaquette_indices, bare_plaquette_potential_energy_diffs] = 
         lat.integrated_plaquette_energy_diff_combination(
             tuple_index, tau_left, tau_right, 
@@ -1318,10 +1398,10 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
             const double integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
             if constexpr (Basis == 'x') {
                 acc_ratio = 2./(lmbda * lmbda * (imag_time_next_next_spin_flip - imag_time_prev_spin_flip) 
-                * (imag_time_next_next_spin_flip - imag_time_prev_spin_flip)) * std::exp(-integrated_pot_energy_diff);
+                * (imag_time_next_next_spin_flip - imag_time_prev_spin_flip)) * boltzmann_weight(integrated_pot_energy_diff);
             } else if constexpr (Basis == 'z') {
                 acc_ratio = 2./(h * h * (imag_time_next_next_spin_flip - imag_time_prev_spin_flip) 
-                * (imag_time_next_next_spin_flip - imag_time_prev_spin_flip)) * std::exp(-integrated_pot_energy_diff);
+                * (imag_time_next_next_spin_flip - imag_time_prev_spin_flip)) * boltzmann_weight(integrated_pot_energy_diff);
             }
             
 
@@ -1409,10 +1489,10 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
             const double integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
             if constexpr (Basis == 'x') {
                 acc_ratio = ((tau_right - tau_left)*(tau_right - tau_left))/2. 
-                * lmbda * lmbda * std::exp(-integrated_pot_energy_diff);
+                * lmbda * lmbda * boltzmann_weight(integrated_pot_energy_diff);
             } else if constexpr (Basis == 'z') {
                 acc_ratio = ((tau_right - tau_left)*(tau_right - tau_left))/2. 
-                * h * h * std::exp(-integrated_pot_energy_diff);
+                * h * h * boltzmann_weight(integrated_pot_energy_diff);
             }
             
 
@@ -1540,7 +1620,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     pot_energy_diffs = std::move(pot_energy_diffs_tmp);
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
                 }
-                acc_ratio = std::exp(-integrated_pot_energy_diff);
+                acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1598,7 +1678,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     );
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-                    acc_ratio = std::exp(-integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1632,7 +1712,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     );
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1666,7 +1746,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     );
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1702,7 +1782,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     );
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1753,7 +1833,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     }
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1805,7 +1885,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
                     }
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_spin_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -1864,7 +1944,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_single_spin_flip(
     );
     const double integrated_pot_energy_diff = integrated_pot_energy_diff_edge + integrated_pot_energy_diff_tuple;
 
-    acc_ratio = std::exp(- integrated_pot_energy_diff);
+    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_single_spin_flip --- acceptance ratio: {}", acc_ratio);
@@ -1925,7 +2005,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_tuple_flip(
     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
     = integrated_pot_energy_diff_tuple_flip_edge(lat, h, mu, J, lmbda, random_tuple, tuple_edges, 0, beta, true);
 
-    acc_ratio = std::exp(- integrated_pot_energy_diff);
+    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_global_single_spin_flip --- acceptance ratio: {}", acc_ratio);
@@ -2035,11 +2115,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
             if constexpr (Basis == 'x') {
                 acc_ratio = 2./(J * J * (imag_time_next_next_tuple_flip - imag_time_prev_tuple_flip) 
                 * (imag_time_next_next_tuple_flip - imag_time_prev_tuple_flip)) 
-                * std::exp(- integrated_pot_energy_diff);
+                * boltzmann_weight(integrated_pot_energy_diff);
             } else if constexpr (Basis == 'z') {
                 acc_ratio = 2./(mu * mu * (imag_time_next_next_tuple_flip - imag_time_prev_tuple_flip) 
                 * (imag_time_next_next_tuple_flip - imag_time_prev_tuple_flip)) 
-                * std::exp(- integrated_pot_energy_diff);
+                * boltzmann_weight(integrated_pot_energy_diff);
             }
 
 #ifndef NDEBUG
@@ -2121,10 +2201,10 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
 
             if constexpr (Basis == 'x') {
                 acc_ratio = ((tau_right - tau_left)*(tau_right - tau_left))/2. 
-                * J * J * std::exp(- integrated_pot_energy_diff);
+                * J * J * boltzmann_weight(integrated_pot_energy_diff);
             } else if constexpr (Basis == 'z') {
                 acc_ratio = ((tau_right - tau_left)*(tau_right - tau_left))/2. 
-                * mu * mu * std::exp(- integrated_pot_energy_diff);
+                * mu * mu * boltzmann_weight(integrated_pot_energy_diff);
             }
 
 #ifndef NDEBUG
@@ -2247,7 +2327,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     pot_energy_diffs = std::move(pot_energy_diffs_tmp);
                     integrated_pot_energy_diff = integrated_pot_energy_diff_edge;
                 }
-                acc_ratio = std::exp(- integrated_pot_energy_diff);
+                acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2292,7 +2372,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
                         new_imag_time, imag_time_tuple_flip, false, true
                     );
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2315,7 +2395,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
                         imag_time_tuple_flip, new_imag_time, false, true
                     );
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2350,7 +2430,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         integrated_pot_energy_diff += integrated_pot_energy_diff_2;
                     }
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2379,7 +2459,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         imag_time_tuple_flip, new_imag_time, false, true
                     );
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2403,7 +2483,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         new_imag_time, imag_time_tuple_flip, false, true
                     );
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2438,7 +2518,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                         integrated_pot_energy_diff += integrated_pot_energy_diff_2;
                     }
 
-                    acc_ratio = std::exp(- integrated_pot_energy_diff);
+                    acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
 #ifndef NDEBUG
                     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- acceptance ratio: {}", acc_ratio);
@@ -2845,7 +2925,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
         BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- integrated_pot_energy_diff: {}", integrated_pot_energy_diff);
 #endif 
 
-    acc_ratio = std::exp(- integrated_pot_energy_diff) * r * std::accumulate(r_b.begin(), r_b.end(), 1., std::multiplies<double>());
+    acc_ratio = boltzmann_weight(integrated_pot_energy_diff) * r * std::accumulate(r_b.begin(), r_b.end(), 1., std::multiplies<double>());
 
 #ifndef NDEBUG
     BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_spin_tuple_combination --- acceptance ratio: {}", acc_ratio);
@@ -3003,10 +3083,8 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
 
         if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
             // avoid accumulation of small numerical errors leading to bias
-            lat.init_potential_energy();
-            lat.rotate_imag_time();
-            integrated_pot_energy = total_integrated_pot_energy(
-                lat, config.param_spec.h, config.param_spec.mu, 
+            reinitialize_potential_energy(
+                lat, integrated_pot_energy, config.param_spec.h, config.param_spec.mu,
                 config.param_spec.J, config.param_spec.lmbda
             );
         }
@@ -3098,6 +3176,11 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     double acc_ratio = 1.;
 
     if (config.sim_spec.custom_therm) {
+        integrated_pot_energy = total_integrated_pot_energy(
+            lat, config.param_spec.h_therm, config.param_spec.mu,
+            config.param_spec.J, config.param_spec.lmbda_therm
+        );
+
         // Pre-Thermalization 
         for (int i = 0; i < config.sim_spec.N_thermalization; ++i) {
             metropolis_step(
@@ -3112,10 +3195,8 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         if (std::abs(config.param_spec.h - config.param_spec.h_therm) > PRECISION) {
             for (int i = 9; i > -1; --i) {
                 h_end = config.param_spec.h + (config.param_spec.h_therm-config.param_spec.h) * i / 10.;
-                lat.init_potential_energy();
-                lat.rotate_imag_time();
-                integrated_pot_energy = total_integrated_pot_energy(
-                    lat, h_end, config.param_spec.mu, 
+                reinitialize_potential_energy(
+                    lat, integrated_pot_energy, h_end, config.param_spec.mu,
                     config.param_spec.J, config.param_spec.lmbda_therm
                 );
                 for (int j = 0; j < config.sim_spec.N_thermalization / 10.; ++j) {
@@ -3130,10 +3211,8 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         if (std::abs(config.param_spec.lmbda - config.param_spec.lmbda_therm) > PRECISION) {
             for (int i = 9; i > -1; --i) {
                 lmbda_end = config.param_spec.lmbda + (config.param_spec.lmbda_therm-config.param_spec.lmbda) * i / 10.;
-                lat.init_potential_energy();
-                lat.rotate_imag_time();
-                integrated_pot_energy = total_integrated_pot_energy(
-                    lat, h_end, config.param_spec.mu, 
+                reinitialize_potential_energy(
+                    lat, integrated_pot_energy, h_end, config.param_spec.mu,
                     config.param_spec.J, lmbda_end
                 );
                 for (int j = 0; j < config.sim_spec.N_thermalization / 10.; ++j) {
@@ -3175,10 +3254,8 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             );
             if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                 // avoid accumulation of small numerical errors leading to bias
-                lat.init_potential_energy();
-                lat.rotate_imag_time();
-                integrated_pot_energy = total_integrated_pot_energy(
-                    lat, config.param_spec.h, config.param_spec.mu, 
+                reinitialize_potential_energy(
+                    lat, integrated_pot_energy, config.param_spec.h, config.param_spec.mu,
                     config.param_spec.J, config.param_spec.lmbda
                 );
             }
@@ -3439,10 +3516,8 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
         h = config.param_spec.h_hys[ n ];
         lmbda = config.param_spec.lmbda_hys[ n ];
 
-        lat.init_potential_energy();
-        lat.rotate_imag_time();
-        integrated_pot_energy = total_integrated_pot_energy(
-            lat, h, config.param_spec.mu, 
+        reinitialize_potential_energy(
+            lat, integrated_pot_energy, h, config.param_spec.mu,
             config.param_spec.J, lmbda
         );
 
@@ -3470,10 +3545,8 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
             );
             if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                 // avoid accumulation of small numerical errors leading to bias
-                lat.init_potential_energy();
-                lat.rotate_imag_time();
-                integrated_pot_energy = total_integrated_pot_energy(
-                    lat, h, config.param_spec.mu, 
+                reinitialize_potential_energy(
+                    lat, integrated_pot_energy, h, config.param_spec.mu,
                     config.param_spec.J, lmbda
                 );
             }
@@ -3488,10 +3561,8 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 );
                 if (total_metropolis_step_count % reset_potential_energy_count == 0) [[unlikely]] {
                     // avoid accumulation of small numerical errors leading to bias
-                    lat.init_potential_energy();
-                    lat.rotate_imag_time();
-                    integrated_pot_energy = total_integrated_pot_energy(
-                        lat, h, config.param_spec.mu, 
+                    reinitialize_potential_energy(
+                        lat, integrated_pot_energy, h, config.param_spec.mu,
                         config.param_spec.J, lmbda
                     );
                 }
