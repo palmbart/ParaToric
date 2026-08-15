@@ -1,3 +1,72 @@
+# ParaToric v1.0.4 Release Notes
+
+Release date: 2026-08-15
+
+v1.0.4 is a maintenance release over v1.0.3 focused on well-defined
+zero-coupling observables and lower overhead in quantum Monte Carlo update
+paths.
+
+## Highlights
+
+- Fixed observables and dynamical susceptibilities that divided by a coupling
+  so parameter points with `h`, `lmbda`, `mu`, or `J` equal to zero return
+  finite values instead of dividing by zero.
+- Added zero-coupling fast paths that skip inactive bare-energy and cache work
+  while keeping potential-energy state synchronized across parameter changes.
+- Cached tuple-flip positions during move proposals to avoid repeating binary
+  searches when accepted moves update lattice state.
+- Removed avoidable small-vector copies, replaced repeated linear scans with
+  `std::upper_bound`, and eliminated modulo operations from periodic
+  potential-energy reset checks.
+
+## User-Facing Changes
+
+- `sigma_x`, `sigma_z`, `star_x`, `plaquette_z`, and the corresponding
+  dynamical susceptibility estimators now produce defined zero-coupling
+  results. `delta` retains the contribution from its still-active term when
+  only one tuple coupling is zero.
+- Simulations at exactly zero coupling avoid energy-difference calculations
+  for the disabled Hamiltonian term, reducing update overhead.
+- Custom thermalization now initializes the integrated potential energy with
+  `h_therm` and `lmbda_therm` before its first Metropolis stage.
+
+## Fixes
+
+- Prevented division by zero in single-spin, tuple, dynamical susceptibility,
+  and `delta` observable estimators.
+- Corrected the initial integrated potential energy used by custom
+  thermalization when its parameters differ from the production parameters.
+- Centralized potential-energy cache rebuilds so transitions from a zero
+  coupling to a nonzero coupling cannot reuse skipped or stale bare-energy
+  data.
+
+## Performance And Internals
+
+- Short-circuited total and differential potential-energy calculations for
+  inactive edge and tuple couplings.
+- Reused tuple-flip indices found while determining a proposal window instead
+  of searching for those positions again after acceptance.
+- Allowed structured-binding result vectors to move into their destinations
+  instead of forcing copies through `const` bindings.
+- Replaced two per-edge linear searches for neighboring single-spin flips with
+  one binary `std::upper_bound` lookup.
+- Replaced per-step modulo checks with increment-and-reset counters and avoided
+  calls to `std::exp` for zero energy differences.
+
+## Compatibility Notes
+
+- CLI options, configuration fields, and public C++ and Python interfaces are
+  unchanged.
+- At exactly zero coupling, affected observables now return finite zero values
+  rather than `NaN` or infinity.
+
+## Reference
+
+- Compared with `v1.0.3`: 4 commits.
+- Project-side changes excluding this changelog entry: 5 files changed,
+  268 insertions, 194 deletions.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.3...v1.0.4
+
 # ParaToric v1.0.3 Release Notes
 
 Release date: 2026-07-11
