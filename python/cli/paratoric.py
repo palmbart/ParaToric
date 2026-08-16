@@ -183,7 +183,25 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = ap.ArgumentParser(description='Run extended toric code QMC simulation', formatter_class=ap.ArgumentDefaultsHelpFormatter)
+    parser = ap.ArgumentParser(description='Extended toric code QMC Python CLI', formatter_class=ap.ArgumentDefaultsHelpFormatter)
+
+    def strictly_positive_int(value: str) -> int:
+        ivalue = int(value)
+        if ivalue <= 0:
+            raise ap.ArgumentTypeError(f"{value!r} is not a strictly positive integer.")
+        return ivalue
+
+    def strictly_positive_float(value: str) -> float:
+            fvalue = float(value)
+            if fvalue <= 0:
+                raise ap.ArgumentTypeError(f"{value!r} is not a strictly positive float.")
+            return fvalue
+
+    def non_negative_int(value: str) -> int:
+            ivalue = int(value)
+            if ivalue < 0:
+                raise ap.ArgumentTypeError(f"{value!r} is not a non-negative integer.")
+            return ivalue
 
     # Monte Carlo parameters
     mc_group = parser.add_argument_group('Simulation parameters')
@@ -198,28 +216,28 @@ if __name__ == '__main__':
                                    'etc_thermalization'])
     mc_group.add_argument('-Ns', '--N_samples', 
                           help='Number of snapshots of the simulation.', 
-                          type=int, default=1000)
+                          type=strictly_positive_int, default=1000)
     mc_group.add_argument('-Nth', '--N_thermalization', 
                           help='Number of thermalization steps.', 
-                          type=int, default=2000)
+                          type=non_negative_int, default=2000)
     mc_group.add_argument('-Nbs', '--N_between_samples', 
                           help='Number of steps between samples.', 
-                          type=int, default=100)
+                          type=non_negative_int, default=100)
     mc_group.add_argument('-reps', '--repetitions',
                           help='Number of MC simulations to average over.',
-                          type=int, default=10)
+                          type=strictly_positive_int, default=10)
     mc_group.add_argument('-T', '--temperature',
                           help='Temperature.',
-                          type=float, default=1.)
+                          type=strictly_positive_float, default=1.)
     mc_group.add_argument('-Tl', '--T_lower',
                           help='Lower limit of temperature.',
-                          type=float, default=1.)
+                          type=strictly_positive_float, default=1.)
     mc_group.add_argument('-Tu', '--T_upper',
                           help='Upper limit of temperature.',
-                          type=float, default=2.)
+                          type=strictly_positive_float, default=2.)
     mc_group.add_argument('-Ts', '--T_steps',
                           help='Number of temperature steps.',
-                          type=int, default=15)
+                          type=strictly_positive_int, default=15)
     mc_group.add_argument('-muc', '--mu_constant',
                           help='Value of the constant mu (star term).',
                           type=float, default=1.)
@@ -243,7 +261,7 @@ if __name__ == '__main__':
                           type=float, default=2.)
     mc_group.add_argument('-hs', '--h_steps',
                           help='Number of h steps (electric field term).',
-                          type=int, default=15)
+                          type=strictly_positive_int, default=15)
     mc_group.add_argument('-lmbdac', '--lmbda_constant', 
                           help='Value of the constant lmbda (gauge field term).', 
                           type=float, default=0.)
@@ -261,10 +279,10 @@ if __name__ == '__main__':
                           type=float, default=2.)
     mc_group.add_argument('-lmbdas', '--lmbda_steps',
                           help='Number of lmbda steps (gauge field term).',
-                          type=int, default=15)
+                          type=strictly_positive_int, default=15)
     mc_group.add_argument('-rad', '--radius',
                           help='Radius of circle sweep in lmbda-h-space.',
-                          type=float, default=0.5)
+                          type=strictly_positive_float, default=0.5)
     mc_group.add_argument('-Thl', '--Theta_lower',
                           help='Lower limit of Theta.',
                           type=float, default=0.)
@@ -276,7 +294,7 @@ if __name__ == '__main__':
                           type=int, default=15)
     mc_group.add_argument('-Nr', '--N_resamples', 
                           help='Number of bootstrap resamples.', 
-                          type=int, default=1000)
+                          type=strictly_positive_int, default=1000)
     mc_group.add_argument('-cth', '--custom_therm', 
                           help='Whether custom thermalization is used (to probe hysteresis).', 
                           type=int, default=0, choices=[0, 1])
@@ -288,7 +306,7 @@ if __name__ == '__main__':
                           type=int, default=0)
     mc_group.add_argument('-bas', '--basis',
                           help='Spin basis (\"x\" or \"z\").',
-                          type=str, default='x')
+                          type=str, default='x', choices=['x', 'z'])
     mc_group.add_argument('-outdir', '--output_directory',
                           help='Directory where the output is stored.',
                           type=str, default=None)
