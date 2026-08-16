@@ -179,6 +179,24 @@ class JobHandler:
         self.log.info(f"The observable \"{obs}\" has not been found, returning \"real\" as output function!")
         return 'real'
 
+    def __warn_invalid_plot_data(self, context: str, **datasets):
+        for name, values in datasets.items():
+            array = np.asarray(values)
+            if array.size == 0:
+                self.log.warning('%s: %s contains no values; plotting will continue.', context, name)
+                continue
+            try:
+                nan_count = int(np.count_nonzero(np.isnan(array)))
+                inf_count = int(np.count_nonzero(np.isinf(array)))
+            except TypeError:
+                self.log.warning('%s: %s is not numeric; plotting will continue.', context, name)
+                continue
+            if nan_count or inf_count:
+                self.log.warning(
+                    '%s: %s contains %d NaN and %d infinite values; plotting will continue.',
+                    context, name, nan_count, inf_count
+                )
+
     def __dictionary_output(self, dictionary: dict):
         return ''.join(f"{key}: {value}\n" for key, value in dictionary.items())
 
@@ -470,6 +488,15 @@ class JobHandler:
                      radius: float, 
                      comment: str = ''):
 
+        self.__warn_invalid_plot_data(
+            f'{simulation}:{obs}',
+            x=variable,
+            values=obs_array,
+            errors=obs_array_error,
+            binder=obs_binder,
+            binder_errors=obs_binder_error,
+            autocorrelation_times=obs_tau_int,
+        )
         output_str = self.__get_observable_output_str(obs)
 
         fig, ax = plt.subplots()
@@ -1118,6 +1145,10 @@ class JobHandler:
 
         self.log.info('Plotting observables...')
 
+        self.__warn_invalid_plot_data(
+            'etc_thermalization', steps=step_array, acceptance_ratios=acc_ratio_array
+        )
+
         fig, ax = plt.subplots()
         ax.xaxis.set_tick_params(direction='in', which='both')
         ax.yaxis.set_tick_params(direction='in', which='both')
@@ -1133,6 +1164,9 @@ class JobHandler:
         plt.close(fig)
 
         for i, obs in enumerate(observables):
+            self.__warn_invalid_plot_data(
+                f'etc_thermalization:{obs}', values=obs_array[i]
+            )
             try:
                 if self.__get_observable_type(obs) == 'real':
                     output_str = self.__get_observable_output_str(obs)
