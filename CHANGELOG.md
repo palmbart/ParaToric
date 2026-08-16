@@ -1,3 +1,82 @@
+# ParaToric v1.0.5 Release Notes
+
+Release date: 2026-08-16
+
+v1.0.5 is a maintenance release over v1.0.4 focused on consistent input
+validation across interfaces, more reliable Python thermalization workflows,
+and corrected Python binding metadata and output handling.
+
+## Highlights
+
+- Added shared validation for the public C++ API, C facade, and native CLI so
+  invalid simulation counts, lattice settings, and hysteresis schedules fail
+  before simulation work begins.
+- Fixed repeated thermalization runs with a fixed seed so every repetition gets
+  a distinct but deterministic random-number stream.
+- Preserved both estimator components of static and dynamical susceptibility
+  data in thermalization plots and HDF5 output.
+- Corrected the Python binding type stub to match the runtime keyword-only
+  signatures and static method interface.
+- Made plotting safer in batch and headless environments by selecting the
+  non-interactive Matplotlib `Agg` backend and warning about empty, nonnumeric,
+  `NaN`, or infinite plot data.
+- Defined zero-coupling off-diagonal susceptibility bootstrap statistics as
+  zero, avoiding a remaining division by zero.
+
+## Validation And CLI Behavior
+
+- Require positive sample, bootstrap-resample, and lattice-size counts while
+  allowing zero thermalization and between-sample steps.
+- Validate positive inverse temperature, supported lattice and boundary names,
+  valid spin basis and default spin, and non-empty equal-length hysteresis
+  schedules.
+- Validate C API handles, configuration and result pointers, observable arrays,
+  hysteresis arrays, and output-path arrays; invalid inputs now populate
+  `ptc_last_error()` and return `PTC_STATUS_INVALID_ARGUMENT`.
+- Added native CLI help via `-h`/`--help`, display help when invoked without
+  arguments, and reject missing or unknown simulation modes.
+- Added early `argparse` validation to the Python CLI for positive and
+  non-negative numeric options and the selected spin basis.
+- Prevented hysteresis runs from being silently truncated when schedule or
+  output-path lengths differ, while allowing in-memory hysteresis runs without
+  snapshot paths.
+
+## Python Fixes
+
+- Changed internal observable defaults from a string to a one-element tuple so
+  the default `energy` observable is not processed character by character.
+- Replaced layout-dependent HDF5 complex-data reinterpretation with direct
+  NumPy conversion to `complex128`.
+- Added separate `_real` and `_imag` thermalization plots and datasets for
+  susceptibility estimators; the unsuffixed HDF5 dataset remains as a
+  backward-compatible alias for the real component.
+- Added `@staticmethod` declarations and corrected parameter order, defaults,
+  and keyword-only markers in `_paratoric.pyi`.
+- Updated the package usage example and stopped the missing-extension fallback
+  from advertising unsupported module-level simulation functions.
+
+## Numerical Fixes
+
+- Return zero mean, uncertainty, Binder statistic, and Binder uncertainty for
+  off-diagonal susceptibility bootstrapping when the associated transverse
+  coupling is zero.
+
+## Compatibility Notes
+
+- Invalid inputs that could previously produce truncated work, undefined
+  behavior, or late failures are now rejected at interface boundaries.
+- Runtime Python binding signatures are unchanged; the type stub now reflects
+  their actual call convention.
+- Existing consumers of the unsuffixed susceptibility thermalization dataset
+  continue to receive its real component.
+
+## Reference
+
+- Compared with `v1.0.4`: 11 commits.
+- Project-side changes excluding this changelog entry: 16 files changed,
+  588 insertions, 187 deletions.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.4...v1.0.5
+
 # ParaToric v1.0.4 Release Notes
 
 Release date: 2026-08-15
