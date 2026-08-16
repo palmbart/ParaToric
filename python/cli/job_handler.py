@@ -82,12 +82,13 @@ class JobHandler:
                          'type': 'real',
                          'output_str': r'$\langle \sigma^x \rangle$',
                          'output_func': self._real_output},
+                        # The complex container carries two real QMC estimator components.
                         {'name': 'sigma_x_static_susceptibility',
-                         'type': 'real',
+                         'type': 'susceptibility',
                          'output_str': r'$\langle \chi_{x}^{\mathrm{stat}} \rangle$',
                          'output_func': self._real_output},
                         {'name': 'sigma_x_dynamical_susceptibility',
-                         'type': 'real',
+                         'type': 'susceptibility',
                          'output_str': r'$\langle \chi_{x}^{\mathrm{dyn}} \rangle$',
                          'output_func': self._real_output},
                         {'name': 'sigma_z',
@@ -95,11 +96,11 @@ class JobHandler:
                          'output_str': r'$\langle \sigma^z \rangle$',
                          'output_func': self._real_output},
                         {'name': 'sigma_z_static_susceptibility',
-                         'type': 'real',
+                         'type': 'susceptibility',
                          'output_str': r'$\langle \chi_{z}^{\mathrm{stat}} \rangle$',
                          'output_func': self._real_output},
                         {'name': 'sigma_z_dynamical_susceptibility',
-                         'type': 'real',
+                         'type': 'susceptibility',
                          'output_str': r'$\langle \chi_{z}^{\mathrm{dyn}} \rangle$',
                          'output_func': self._real_output},
                         {'name': 'star_x',
@@ -262,7 +263,7 @@ class JobHandler:
             acc_ratio = np.asarray(f['simulation/results/acc_ratio'][()])
             
             for obs_name in obs:
-                if self.__get_observable_type(obs_name) in ["real", "complex"]:
+                if self.__get_observable_type(obs_name) in ['real', 'complex', 'susceptibility']:
                     series = f[f"simulation/results/{obs_name}/series"][()]
                     result.append(np.asarray(series, dtype=np.complex128))
 
@@ -336,7 +337,7 @@ class JobHandler:
         autocorrelation_time_list = []
         with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
             for obs_name in obs:
-                if self.__get_observable_type(obs_name) in ["real", "complex"]:
+                if self.__get_observable_type(obs_name) in ['real', 'complex', 'susceptibility']:
                     base = f[f"simulation/results/{obs_name}"]
 
                     mean = base['mean'][()]      
@@ -425,7 +426,7 @@ class JobHandler:
             
             with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
                 for obs_name in obs:
-                    if self.__get_observable_type(obs_name) in ["real", "complex"]:
+                    if self.__get_observable_type(obs_name) in ['real', 'complex', 'susceptibility']:
                         base = f[f"simulation/results/{obs_name}"]
 
                         mean = base['mean'][()]      
@@ -1183,10 +1184,12 @@ class JobHandler:
                     ax.set(ylabel=output_str+'_real')
 
                     fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}.pdf"))
+                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}_real.pdf"))
                     plt.close(fig)
 
                     hdf5_dict[obs+'_real'] = obs_array[i].real
+                    if self.__get_observable_type(obs) == 'susceptibility':
+                        hdf5_dict[obs] = obs_array[i].real  # Backward-compatible alias.
 
                     fig, (ax1, ax2) = plt.subplots(2, sharex=True)
                     ax1.xaxis.set_tick_params(direction='in', which='both')
@@ -1220,7 +1223,7 @@ class JobHandler:
                     ax.set(ylabel=output_str+'_imag')
 
                     fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}.pdf"))
+                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}_imag.pdf"))
                     plt.close(fig)
 
                     hdf5_dict[obs+'_imag'] = obs_array[i].imag
