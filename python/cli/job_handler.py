@@ -256,7 +256,6 @@ class JobHandler:
             '--process_index', process_index,
         ])
 
-        # Here we expect that each observable in the hdf5 has the structure 'r', 'i' (real and imaginary part)
         result = []
         with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
             # acc_ratio is just a double and not complex
@@ -264,13 +263,8 @@ class JobHandler:
             
             for obs_name in obs:
                 if self.__get_observable_type(obs_name) in ["real", "complex"]:
-                    raw = f[f"simulation/results/{obs_name}/series"][()] # this is a plain float64 array
-                    # reinterpret as 16‑byte records with two float64 fields
-                    dt = np.dtype([('r', '<f8'), ('i', '<f8')])
-                    data_struct = raw.view('V16').view(dt)
-                    r = data_struct['r']
-                    i = data_struct['i']
-                    result.append(r + 1j*i)
+                    series = f[f"simulation/results/{obs_name}/series"][()]
+                    result.append(np.asarray(series, dtype=np.complex128))
 
         result = np.array(result, dtype=np.complex128)
 
