@@ -5,6 +5,8 @@ from datetime import datetime
 from datetime import timedelta
 import h5py
 import logging
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
