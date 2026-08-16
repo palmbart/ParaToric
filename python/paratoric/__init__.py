@@ -3,7 +3,9 @@
 Paratoric Python bindings.
 
 Usage:
-    from paratoric import extended_toric_code, get_sample
+    from paratoric import extended_toric_code
+
+    result = extended_toric_code.get_sample(...)
 """
 
 from __future__ import annotations
@@ -38,7 +40,7 @@ except (ImportError, OSError) as _e:
     )
     # Optional: expose a lazy attribute loader instead of failing immediately
     def __getattr__(name: str):
-        if name in {"extended_toric_code", "get_sample", "get_thermalization", "get_hysteresis"}:
+        if name == "extended_toric_code":
             raise ImportError(_HINT) from _CAUSE
         raise AttributeError(name)
 
