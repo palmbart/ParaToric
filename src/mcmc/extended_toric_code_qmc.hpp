@@ -4,6 +4,7 @@
 #pragma once
 
 #include "lattice/lattice.hpp"
+#include "mcmc/input_validation.hpp"
 #include "paratoric/types/types.hpp"
 #include "rng/rng.hpp"
 #include "statistics/autocorrelation.hpp"
@@ -88,7 +89,8 @@ class ExtendedToricCodeQMC {
          * @throws std::runtime_error     On RNG initialization failure or I/O errors
          *                                when saving snapshots.
          * 
-         * @pre config.sim_spec.N_thermalization > 0
+         * @pre config.sim_spec.N_thermalization >= 0
+         * @pre config.sim_spec.N_resamples > 0
          * @pre config.lat_spec.beta > 0
          * @pre config.lat_spec.basis in {'x','z'}
          * 
@@ -140,7 +142,9 @@ class ExtendedToricCodeQMC {
          *                                when saving snapshots.
          * 
          * @pre config.sim_spec.N_samples > 0
-         * @pre config.sim_spec.N_thermalization > 0
+         * @pre config.sim_spec.N_thermalization >= 0
+         * @pre config.sim_spec.N_between_samples >= 0
+         * @pre config.sim_spec.N_resamples > 0
          * @pre config.lat_spec.beta > 0
          * @pre config.lat_spec.basis in {'x','z'}
          * 
@@ -200,7 +204,11 @@ class ExtendedToricCodeQMC {
          *                                when saving snapshots.
          * 
          * @pre config.sim_spec.N_samples > 0
-         * @pre config.sim_spec.N_thermalization > 0
+         * @pre config.sim_spec.N_thermalization >= 0
+         * @pre config.sim_spec.N_between_samples >= 0
+         * @pre config.sim_spec.N_resamples > 0
+         * @pre config.param_spec.h_hys and config.param_spec.lmbda_hys are non-empty
+         *      and have equal lengths
          * @pre config.lat_spec.beta > 0
          * @pre config.lat_spec.basis in {'x','z'}
          * 
@@ -2973,6 +2981,8 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
     const Config& config
 ) {
 
+    detail::validate_thermalization_config(config);
+
     if constexpr (Basis != 'x' && Basis != 'z') {
         throw std::invalid_argument("Basis must be either \"x\" or \"z\".");
     }
@@ -3074,6 +3084,8 @@ requires ValidBasis<Basis>
 Result ExtendedToricCodeQMC<Basis>::get_sample(
     const Config& config
 ) { 
+
+    detail::validate_sample_config(config);
 
     if constexpr (Basis != 'x' && Basis != 'z') {
         throw std::invalid_argument("Basis must be either \"x\" or \"z\".");
@@ -3371,6 +3383,8 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
     const Config& config
 ) {
 
+    detail::validate_hysteresis_config(config);
+
     if constexpr (Basis != 'x' && Basis != 'z') {
         throw std::invalid_argument("Basis must be either \"x\" or \"z\".");
     }
@@ -3448,7 +3462,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
     int metropolis_step_count = 0;
     int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*100000);
 
-    for (size_t n = 0; n < std::min( config.param_spec.h_hys.size(), std::min(config.param_spec.lmbda_hys.size(), config.out_spec.paths_out.size()) ); n++) {
+    for (size_t n = 0; n < config.param_spec.h_hys.size(); n++) {
         // Vector to store observable results for all snapshots
         const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
         std::vector<std::vector<std::variant< std::complex<double>, double>>> observable_vector;
@@ -3463,7 +3477,9 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
             observable_vector.emplace_back();
             observable_vector.back().reserve(sample_count);
         } 
-        auto path_out = config.out_spec.paths_out [ n ];
+        const auto path_out = n < config.out_spec.paths_out.size()
+            ? config.out_spec.paths_out[n]
+            : std::filesystem::path{};
         h = config.param_spec.h_hys[ n ];
         lmbda = config.param_spec.lmbda_hys[ n ];
 
@@ -3529,7 +3545,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
         }
 
         if (config.out_spec.save_snapshots) {
-            lat.write_graph("snapshots", config.out_spec.path_out);
+            lat.write_graph("snapshots", path_out);
         }
 
         for (size_t k = 0; k < config.sim_spec.observables.size(); k++) {

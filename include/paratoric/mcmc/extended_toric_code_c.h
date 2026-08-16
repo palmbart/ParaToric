@@ -291,7 +291,7 @@ typedef struct ptc_handle_t ptc_handle_t;
 /**
  * @brief Create the facade
  * 
- * @param out_handle pointer to ptc_handle_t, can be null pointer 
+ * @param out_handle non-null pointer receiving the created handle
  * @return ptc_status_t 
  */
 ptc_status_t ptc_create(ptc_handle_t** out_handle);
@@ -337,6 +337,9 @@ void         ptc_destroy(ptc_handle_t* handle);
  *                        contains one value per recorded snapshot, in time order.
  * @param out.acc_ratio   Time series of Monte Carlo acceptance ratios.
  * 
+ * @note N_thermalization must be non-negative, N_resamples and system_size
+ *       must be positive, and beta must be strictly positive.
+ *
  * @return ptc_status_t exit status 
  */
 ptc_status_t ptc_get_thermalization(
@@ -385,6 +388,10 @@ ptc_status_t ptc_get_thermalization(
  * @param out.binder_std  Bootstrap standard errors of the binder ratios
  * @param out.tau_int     Estimated integrated autocorrelation times
  * 
+ * @note N_samples and N_resamples must be positive. N_thermalization and
+ *       N_between_samples must be non-negative. system_size and beta must be
+ *       strictly positive.
+ *
  * @return ptc_status_t  
  */
 ptc_status_t ptc_get_sample(
@@ -442,6 +449,9 @@ ptc_status_t ptc_get_sample(
  *                             Each element of the outer vector represents one parameter point (h_hys, lmbda_hys).
  *                             Each element in the inner vectors represents one observables in the order of input.
  * 
+ * @note Sampling counts follow the same constraints as ptc_get_sample.
+ *       h_hys and lmbda_hys must be non-empty and have equal lengths.
+ *
  * @return ptc_status_t 
  */
 ptc_status_t ptc_get_hysteresis(

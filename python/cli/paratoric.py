@@ -327,7 +327,7 @@ if __name__ == '__main__':
                                type=str, default='square', choices=['square', 'cubic', 'honeycomb', 'triangular'])
     lattice_group.add_argument('-L', '--system_size',
                                help='System size of lattice (one coordinate).',
-                               type=int, default=5)
+                               type=strictly_positive_int, default=5)
     lattice_group.add_argument('-bound', '--boundaries', 
                                help='Boundary conditions.', 
                                type=str, default='periodic', choices=['periodic', 'open'])

@@ -7,6 +7,7 @@
 #include "paratoric/types/types.hpp"
 
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <memory>
@@ -106,6 +107,37 @@ static Config to_cpp(const ptc_config_t& c) {
     cfg.sim_spec       = to_cpp(c.sim);
     cfg.out_spec       = to_cpp(c.out);
     return cfg;
+}
+
+static void validate_c_config(const ptc_config_t& c) {
+    if (c.sim.N_observables > 0 && !c.sim.observables) {
+        throw std::invalid_argument(
+            "observables must not be NULL when N_observables is non-zero"
+        );
+    }
+    for (size_t i = 0; i < c.sim.N_observables; ++i) {
+        if (!c.sim.observables[i]) {
+            throw std::invalid_argument("observable names must not be NULL");
+        }
+    }
+
+    if (c.params.h_hys_len > 0 && !c.params.h_hys) {
+        throw std::invalid_argument("h_hys must not be NULL when h_hys_len is non-zero");
+    }
+    if (c.params.lmbda_hys_len > 0 && !c.params.lmbda_hys) {
+        throw std::invalid_argument(
+            "lmbda_hys must not be NULL when lmbda_hys_len is non-zero"
+        );
+    }
+
+    if (c.out.N_paths_out > 0 && !c.out.paths_out) {
+        throw std::invalid_argument("paths_out must not be NULL when N_paths_out is non-zero");
+    }
+    for (size_t i = 0; i < c.out.N_paths_out; ++i) {
+        if (!c.out.paths_out[i]) {
+            throw std::invalid_argument("output paths must not be NULL");
+        }
+    }
 }
 
 /* ----- Result (C++) -> (C) ----- */
@@ -250,7 +282,10 @@ static ptc_status_t fill_from_cpp(const Result& r, ptc_result_t* out) {
 /* ---------- public API ---------- */
 
 extern "C" ptc_status_t ptc_create(ptc_handle_t** out_handle) {
-    if (!out_handle) return PTC_STATUS_INVALID_ARGUMENT;
+    if (!out_handle) {
+        set_error("out_handle must not be NULL");
+        return PTC_STATUS_INVALID_ARGUMENT;
+    }
     try {
         auto h = new ptc_handle_t;
         h->impl = std::make_unique<ExtendedToricCode>();
@@ -299,7 +334,10 @@ static ptc_status_t call_cpp(const ptc_config_t* c,
                              ptc_result_t* out,
                              Result (*fn)(const Config&))
 {
-    if (!c || !out) return PTC_STATUS_INVALID_ARGUMENT;
+    if (!c || !out) {
+        set_error("config and out must not be NULL");
+        return PTC_STATUS_INVALID_ARGUMENT;
+    }
 
     *out = ptc_result_t{};
 
@@ -309,6 +347,7 @@ static ptc_status_t call_cpp(const ptc_config_t* c,
     };
 
     try {
+        validate_c_config(*c);
         Config cfg = to_cpp(*c);
         Result r = fn(cfg);  // call the static method
 
@@ -334,7 +373,10 @@ extern "C" ptc_status_t ptc_get_thermalization(ptc_handle_t* handle,
                                                const ptc_config_t* config,
                                                ptc_result_t* out)
 {
-    if (!handle || !handle->impl) return PTC_STATUS_INVALID_ARGUMENT;
+    if (!handle || !handle->impl) {
+        set_error("handle must not be NULL");
+        return PTC_STATUS_INVALID_ARGUMENT;
+    }
     return call_cpp(config, out, &ExtendedToricCode::get_thermalization);
 }
 
@@ -342,7 +384,10 @@ extern "C" ptc_status_t ptc_get_sample(ptc_handle_t* handle,
                                        const ptc_config_t* config,
                                        ptc_result_t* out)
 {
-    if (!handle || !handle->impl) return PTC_STATUS_INVALID_ARGUMENT;
+    if (!handle || !handle->impl) {
+        set_error("handle must not be NULL");
+        return PTC_STATUS_INVALID_ARGUMENT;
+    }
     return call_cpp(config, out, &ExtendedToricCode::get_sample);
 }
 
@@ -350,6 +395,9 @@ extern "C" ptc_status_t ptc_get_hysteresis(ptc_handle_t* handle,
                                            const ptc_config_t* config,
                                            ptc_result_t* out)
 {
-    if (!handle || !handle->impl) return PTC_STATUS_INVALID_ARGUMENT;
+    if (!handle || !handle->impl) {
+        set_error("handle must not be NULL");
+        return PTC_STATUS_INVALID_ARGUMENT;
+    }
     return call_cpp(config, out, &ExtendedToricCode::get_hysteresis);
 }

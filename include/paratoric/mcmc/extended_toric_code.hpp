@@ -58,7 +58,8 @@ public:
      * @throws std::runtime_error     On RNG initialization failure or I/O errors
      *                                when saving snapshots.
      * 
-     * @pre config.sim_spec.N_thermalization > 0
+     * @pre config.sim_spec.N_thermalization >= 0
+     * @pre config.sim_spec.N_resamples > 0
      * @pre config.lat_spec.beta > 0
      * @pre config.lat_spec.basis in {'x','z'}
      * 
@@ -107,7 +108,9 @@ public:
      *                                when saving snapshots.
      * 
      * @pre config.sim_spec.N_samples > 0
-     * @pre config.sim_spec.N_thermalization > 0
+     * @pre config.sim_spec.N_thermalization >= 0
+     * @pre config.sim_spec.N_between_samples >= 0
+     * @pre config.sim_spec.N_resamples > 0
      * @pre config.lat_spec.beta > 0
      * @pre config.lat_spec.basis in {'x','z'}
      * 
@@ -164,7 +167,11 @@ public:
      *                                when saving snapshots.
      * 
      * @pre config.sim_spec.N_samples > 0
-     * @pre config.sim_spec.N_thermalization > 0
+     * @pre config.sim_spec.N_thermalization >= 0
+     * @pre config.sim_spec.N_between_samples >= 0
+     * @pre config.sim_spec.N_resamples > 0
+     * @pre config.param_spec.h_hys and config.param_spec.lmbda_hys are non-empty
+     *      and have equal lengths
      * @pre config.lat_spec.beta > 0
      * @pre config.lat_spec.basis in {'x','z'}
      * 

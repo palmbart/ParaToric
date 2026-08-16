@@ -5,6 +5,7 @@ find_package(Boost COMPONENTS unit_test_framework REQUIRED NO_MODULE)
 set(test_sources
     lattice/test_lattice.cpp
     mcmc/test_extended_toric_code_qmc.cpp
+    mcmc/test_input_validation.cpp
 )
 
 foreach(test_src IN LISTS test_sources)

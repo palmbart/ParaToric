@@ -51,11 +51,29 @@ Lattice::SnapshotSpoolState::~SnapshotSpoolState() {
 }
 
 void Lattice::check_input_validity() const {
+    if (BASIS != 'x' && BASIS != 'z') {
+        throw std::invalid_argument("Basis has to be 'x' or 'z'.");
+    }
+
+    if (LATTICE_TYPE != "square"
+        && LATTICE_TYPE != "cubic"
+        && LATTICE_TYPE != "honeycomb"
+        && LATTICE_TYPE != "triangular"
+        && LATTICE_TYPE != "kagome") {
+        throw std::invalid_argument(std::format(
+            "Lattice type \"{}\" is not supported.", LATTICE_TYPE
+        ));
+    }
+
+    if (SYSTEM_SIZE <= 0) {
+        throw std::invalid_argument("System size has to be strictly positive.");
+    }
+
     if (DEFAULT_SPIN != -1 && DEFAULT_SPIN != 1) {
         throw std::invalid_argument("Default spin has to be 1 or -1.");
     }
 
-    if (BETA <= 0) {
+    if (!(BETA > 0)) {
         throw std::invalid_argument("Beta has to be strictly positive.");
     }
 
