@@ -365,6 +365,13 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
     double Nsites, std::shared_ptr<RNG> rng, size_t n_iter = 1000
 ) {
     if (kvec.size() < 2) throw std::invalid_argument("need >=2 samples");
+    if (h == 0.0) {
+        // At zero transverse coupling there are no corresponding expansion
+        // events, so both moments in the count estimator vanish.  Avoid the
+        // resulting 0/0 and follow the zero-coupling convention used by the
+        // other off-diagonal observables.
+        return {0.0, 0.0, 0.0, 0.0};
+    }
 
     double blk_len = opt_block_length(kvec);
 
@@ -519,4 +526,3 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_dynamical_susce
 }
 
 } // namespace paratoric::statistics
-
