@@ -1082,7 +1082,7 @@ class JobHandler:
         output_dir_t = os.path.join(output_dir, 'data')
         os.mkdir(output_dir_t)
         with mp.Pool(processes=processes) as pool:
-            arguments = ((0, N_thermalization, beta, mu, h, J, lmbda, N_resamples, output_dir_t, observables, seed, basis, save_snapshots, i) for i in range(repetitions))
+            arguments = ((0, N_thermalization, beta, mu, h, J, lmbda, N_resamples, output_dir_t, observables, seed + i if seed else 0, basis, save_snapshots, i) for i in range(repetitions))
             results = pool.starmap(self._get_thermalization_cpp, arguments, chunksize=1)
 
         step_array = np.asarray(results[0][0], dtype=np.float64)          
