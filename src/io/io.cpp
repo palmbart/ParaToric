@@ -9,14 +9,61 @@
 #include <H5Cpp.h>  
 
 #include <algorithm>   // std::min
+#include <complex>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <variant>
 #include <vector>  
 
 #define UNUSED(expr) do { (void)(expr); } while (0)
 
 namespace paratoric {
+
+namespace {
+
+struct Hdf5Complex {
+    double r;
+    double i;
+};
+
+using ObservableValue = std::variant<std::complex<double>, double>;
+
+void write_observable_series(
+    H5::Group& observable_group,
+    const std::vector<ObservableValue>& values
+) {
+    std::vector<Hdf5Complex> serialized;
+    serialized.reserve(values.size());
+    for (const auto& value : values) {
+        if (const auto* complex_value = std::get_if<std::complex<double>>(&value)) {
+            serialized.push_back({complex_value->real(), complex_value->imag()});
+        } else {
+            serialized.push_back({std::get<double>(value), 0.0});
+        }
+    }
+
+    const hsize_t dimensions[1] = {serialized.size()};
+    H5::DataSpace dataspace{1, dimensions};
+
+    H5::CompType complex_data_type(sizeof(Hdf5Complex));
+    complex_data_type.insertMember(
+        "r", offsetof(Hdf5Complex, r), H5::PredType::NATIVE_DOUBLE
+    );
+    complex_data_type.insertMember(
+        "i", offsetof(Hdf5Complex, i), H5::PredType::NATIVE_DOUBLE
+    );
+
+    auto dataset = observable_group.createDataSet(
+        "series", complex_data_type, dataspace
+    );
+    if (!serialized.empty()) {
+        dataset.write(serialized.data(), complex_data_type);
+    }
+}
+
+} // namespace
 
 void IO::etc_sample(
     const Config& config
@@ -74,16 +121,7 @@ void IO::etc_sample(
 
         if (obs_type == "real" || obs_type == "fredenhagen_marcu" || obs_type == "susceptibility") {
             if (config.out_spec.full_time_series) {
-                hsize_t dims[1] = { obs_result_vector.size() };
-                H5::DataSpace dataspace{ 1, dims };
-
-                H5::CompType complex_data_type(sizeof(obs_result_vector[0]));
-                complex_data_type.insertMember( "r", 0, H5::PredType::NATIVE_DOUBLE);
-                complex_data_type.insertMember( "i", sizeof(double), H5::PredType::NATIVE_DOUBLE);
-
-                H5::DataSet dataset = obs_grp.createDataSet("series", complex_data_type, dataspace);
-
-                dataset.write(obs_result_vector.data(), complex_data_type);
+                write_observable_series(obs_grp, obs_result_vector);
             }
         } else {
             throw std::runtime_error(std::format("Observable type \"{}\" is not supported.", obs_type));
@@ -165,16 +203,7 @@ void IO::etc_hysteresis(
 
             if (obs_type == "real" || obs_type == "fredenhagen_marcu" || obs_type == "susceptibility") {
                 if (config.out_spec.full_time_series) {
-                    hsize_t dims[1] = { obs_result_vector.size() };
-                    H5::DataSpace dataspace{ 1, dims };
-
-                    H5::CompType complex_data_type(sizeof(obs_result_vector[0]));
-                    complex_data_type.insertMember( "r", 0, H5::PredType::NATIVE_DOUBLE);
-                    complex_data_type.insertMember( "i", sizeof(double), H5::PredType::NATIVE_DOUBLE);
-
-                    H5::DataSet dataset = obs_grp.createDataSet("series", complex_data_type, dataspace);
-
-                    dataset.write(obs_result_vector.data(), complex_data_type);
+                    write_observable_series(obs_grp, obs_result_vector);
                 }
             } else {
                 throw std::runtime_error(std::format("Observable type \"{}\" is not supported.", obs_type));
@@ -245,16 +274,7 @@ void IO::etc_thermalization(
         H5::Group obs_grp = getOrCreateGroup(results_grp, obs_name);
 
         if (obs_type == "real" || obs_type == "fredenhagen_marcu" || obs_type == "susceptibility") {
-            hsize_t dims[1] = { obs_result_vector.size() };
-            H5::DataSpace dataspace{ 1, dims };
-
-            H5::CompType complex_data_type(sizeof(obs_result_vector[0]));
-            complex_data_type.insertMember( "r", 0, H5::PredType::NATIVE_DOUBLE);
-            complex_data_type.insertMember( "i", sizeof(double), H5::PredType::NATIVE_DOUBLE);
-
-            H5::DataSet dataset = obs_grp.createDataSet("series", complex_data_type, dataspace);
-
-            dataset.write(obs_result_vector.data(), complex_data_type);
+            write_observable_series(obs_grp, obs_result_vector);
         } else {
             throw std::runtime_error(std::format("Observable type \"{}\" is not supported.", obs_type));
         }
