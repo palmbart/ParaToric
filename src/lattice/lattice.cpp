@@ -2367,7 +2367,10 @@ std::pair<double, double> Lattice::tuple_flip_window(
 
         if (!spin_flips.empty()) [[likely]] {
             const auto lower = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau);
-            const auto upper = std::upper_bound(lower, spin_flips.end(), tau);
+            // The lower bound is already at the event (normally unique).
+            // Skip equal-time events without another search of the entire tail.
+            auto upper = lower;
+            while (upper != spin_flips.end() && *upper == tau) ++upper;
 
             if (flip_indices != nullptr) {
                 flip_indices->emplace_back(static_cast<int>(lower - spin_flips.begin()));
@@ -3840,49 +3843,49 @@ double Lattice::cube_percolation_probability() {
 void Lattice::rotate_imag_time() {
     std::uniform_real_distribution<double> new_times_dist(0, BETA);
     const double tau_0 = new_times_dist(*rng);
+    // Reuse one buffer across all histories. Copy the two sorted segments in
+    // their new order while shifting them, avoiding an in-place rotation plus
+    // a separate modulo pass over every event.
+    std::vector<double> shifted_times;
+    const auto rotate_times = [&](std::vector<double>& times) {
+        const auto pivot = static_cast<size_t>(
+            std::lower_bound(times.begin(), times.end(), tau_0) - times.begin());
+        if (shifted_times.size() < times.size()) shifted_times.resize(times.size());
+        const auto shift = [&](double t) {
+            t -= tau_0;
+            // Valid event times and the cut are in [0, beta], so at most one
+            // wrap is needed. Preserve the zero-time convention below.
+            if (t < 0.) t += BETA;
+            else if (t >= BETA) t -= BETA;
+            if (t == 0.) t += std::numeric_limits<double>::epsilon();
+            return t;
+        };
+        for (size_t i = pivot; i < times.size(); ++i) {
+            shifted_times[i - pivot] = shift(times[i]);
+        }
+        for (size_t i = 0; i < pivot; ++i) {
+            shifted_times[times.size() - pivot + i] = shift(times[i]);
+        }
+        std::copy_n(shifted_times.begin(), times.size(), times.begin());
+        return pivot;
+    };
+
     for (const auto& edg : egde_cache_) {
-        auto& single_spin_flips = g[edg].single_spin_flips;
-        auto& spin_flips = g[edg].spin_flips;
-        auto it_single = std::lower_bound(single_spin_flips.begin(), single_spin_flips.end(), tau_0);
-        auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau_0);
-        size_t pivot_index = std::distance(spin_flips.begin(), it);
+        rotate_times(g[edg].single_spin_flips);
+        const size_t pivot_index = rotate_times(g[edg].spin_flips);
         // flips crossing the cut = pivot_index
         if (pivot_index % 2 == 1) {
             g[edg].spin *= -1;
-        }
-        // rotate so that pivot becomes first element
-        std::rotate(single_spin_flips.begin(), it_single, single_spin_flips.end());
-        std::rotate(spin_flips.begin(), it, spin_flips.end());
-        // now wrap times by subtracting tau_0 and bringing into [0, beta)
-        for (double& t : single_spin_flips) {
-            t = modulo(t - tau_0, BETA);
-            if (t==0) t += std::numeric_limits<double>::epsilon();
-        }
-        for (double& t : spin_flips) {
-            t = modulo(t - tau_0, BETA);
-            if (t==0) t += std::numeric_limits<double>::epsilon();
         }
     }
 
     if (BASIS == 'x') {
         for (int p_index = 0; p_index < get_plaquette_count(); ++p_index) {
-            auto& plaquette_spin_flips = plaquette_flip_vector[p_index];
-            auto it = std::lower_bound(plaquette_spin_flips.begin(), plaquette_spin_flips.end(), tau_0);
-            std::rotate(plaquette_spin_flips.begin(), it, plaquette_spin_flips.end());
-            for (double& t : plaquette_spin_flips) {
-                t = modulo(t - tau_0, BETA);
-                if (t==0) t += std::numeric_limits<double>::epsilon();
-            }
+            rotate_times(plaquette_flip_vector[p_index]);
         }
     } else {
         for (int s_index = 0; s_index < get_vertex_count(); ++s_index) {
-            auto& star_spin_flips = g[s_index].star_flips;
-            auto it = std::lower_bound(star_spin_flips.begin(), star_spin_flips.end(), tau_0);
-            std::rotate(star_spin_flips.begin(), it, star_spin_flips.end());
-            for (double& t : star_spin_flips) {
-                t = modulo(t - tau_0, BETA);
-                if (t==0) t += std::numeric_limits<double>::epsilon();
-            }
+            rotate_times(g[s_index].star_flips);
         } 
     }
 

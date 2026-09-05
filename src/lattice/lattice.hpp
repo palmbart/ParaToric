@@ -1602,8 +1602,6 @@ inline double Lattice::integrated_edge_energy(
     const auto& spin_flips = g[edg].spin_flips;  
     auto lo = std::lower_bound(
         spin_flips.begin(), spin_flips.end(), imag_time_1);
-    auto hi = std::upper_bound(
-        lo, spin_flips.end(), imag_time_2);
 
     // determine spin just after imag_time_1
     int base_spin = get_spin(edg);
@@ -1615,7 +1613,7 @@ inline double Lattice::integrated_edge_energy(
     double t_prev = imag_time_1;
 
     // accumulate each flip interval
-    for (auto it = lo; it != hi; ++it) {
+    for (auto it = lo; it != spin_flips.end() && *it <= imag_time_2; ++it) {
         double t_curr = *it;
         energy += (t_curr - t_prev) * spin;
         spin   = -spin;
