@@ -5,6 +5,7 @@
 
 #include "paratoric/types/types.hpp"
 #include "rng/rng.hpp"
+#include "lattice/time_search.hpp"
 
 #include <boost/container/small_vector.hpp>
 #include <boost/graph/adjacency_list.hpp>
@@ -871,8 +872,11 @@ public:
      * 
      */
     double integrated_edge_energy_diff(const Edge& edg, double imag_time_1, double imag_time_2);
+    // Optional known_flip_index is the lower-bound rank of known_flip_time.
+    // It is reused only when that event borders the event-free interval.
     inline double integrated_edge_energy_diff_no_inner_flips(
-        const Edge& edg, double imag_time_1, double imag_time_2
+        const Edge& edg, double imag_time_1, double imag_time_2,
+        int known_flip_index = -1, double known_flip_time = 0.
     );
 
     /**
@@ -1512,7 +1516,8 @@ inline double Lattice::integrated_edge_energy_diff_combination(
 
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_edge_energy_diff_no_inner_flips(
-    const Edge& edg, double imag_time_1, double imag_time_2
+    const Edge& edg, double imag_time_1, double imag_time_2,
+    int known_flip_index, double known_flip_time
 ) {
     if (imag_time_1 == imag_time_2) {
         throw std::invalid_argument(
@@ -1520,7 +1525,15 @@ inline double Lattice::integrated_edge_energy_diff_no_inner_flips(
     }
 
     const auto& spin_flips = g[edg].spin_flips;
-    auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
+    // In a tuple-move window the spin is constant on either side of the
+    // selected event. Its already-known rank determines the spin by parity.
+    if (known_flip_index >= 0 && imag_time_2 == known_flip_time) {
+        const int spin = (known_flip_index & 1) ? -get_spin(edg) : get_spin(edg);
+        return -2.0 * (imag_time_2 - imag_time_1) * spin;
+    }
+    auto it = known_flip_index >= 0 && imag_time_1 == known_flip_time
+        ? spin_flips.begin() + known_flip_index
+        : detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
 
     int spin = ((it - spin_flips.begin()) & 1) ? -get_spin(edg) : get_spin(edg);
     while (it != spin_flips.end() && *it == imag_time_1) {
@@ -1600,7 +1613,7 @@ inline double Lattice::integrated_edge_energy(
     }
 
     const auto& spin_flips = g[edg].spin_flips;  
-    auto lo = std::lower_bound(
+    auto lo = detail::time_lower_bound(
         spin_flips.begin(), spin_flips.end(), imag_time_1);
 
     // determine spin just after imag_time_1
@@ -1688,7 +1701,7 @@ inline double Lattice::integrated_tuple_energy_diff_combination_from_flips(
             int spin_prod = 1;
             for (const Edge& e : tuple_edges) {
                 const auto& flips = single_flips_only ? g[e].single_spin_flips : g[e].spin_flips;
-                const auto hi = std::upper_bound(flips.begin(), flips.end(), imag_time_2);
+                const auto hi = detail::time_upper_bound(flips.begin(), flips.end(), imag_time_2);
                 int s = get_spin(e);
                 if (((hi - flips.begin()) & 1) != 0) {
                     s = -s;
@@ -1781,7 +1794,7 @@ inline double Lattice::integrated_tuple_energy_from_flips(
     int spin_at_t2 = 1;
     for (auto const& edg : tuple_edges) {
         auto const& spin_flips = single_flips_only ? g[edg].single_spin_flips : g[edg].spin_flips;
-        auto hi = std::upper_bound(spin_flips.begin(), spin_flips.end(), imag_time_2);
+        auto hi = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), imag_time_2);
 
         int s = get_spin(edg);
         if (((hi - spin_flips.begin()) & 1) != 0) {

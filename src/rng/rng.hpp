@@ -46,11 +46,13 @@ inline std::uint64_t uniform_index(RNG& rng, std::uint64_t bound) {
     }
 
 #if defined(__SIZEOF_INT128__)
-    const std::uint64_t threshold = -bound % bound;
     while (true) {
         const auto product = static_cast<unsigned __int128>(rng()) * bound;
         const auto low = static_cast<std::uint64_t>(product);
-        if (low >= threshold) {
+        // threshold = 2^64 mod bound is strictly less than bound. For the
+        // usual small lattice/event counts, low >= bound on almost every draw,
+        // so the division is only needed in the rare rejection region.
+        if (low >= bound || low >= -bound % bound) {
             return static_cast<std::uint64_t>(product >> 64);
         }
     }

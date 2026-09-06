@@ -701,7 +701,8 @@ class ExtendedToricCodeQMC {
             int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
             double imag_time_spin_flip, double imag_time_next_spin_flip, 
             bool total_cache,
-            bool interval_has_no_inner_flips = false
+            bool interval_has_no_inner_flips = false,
+            std::span<const int> known_flip_indices = {}, double known_flip_time = 0.
         );
 
         /**
@@ -1179,7 +1180,8 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     int tuple_index, std::span<const Lattice::Edge> tuple_edges, 
     double imag_time_spin_flip, double imag_time_next_spin_flip, 
     bool total_cache,
-    bool interval_has_no_inner_flips
+    bool interval_has_no_inner_flips,
+    std::span<const int> known_flip_indices, double known_flip_time
 ) {
     UNUSED(tuple_index);
     UNUSED(mu);
@@ -1195,12 +1197,14 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     SmallEnergyVector bare_energy_single_vector;
     bare_energy_single_vector.reserve(tuple_edges.size());
     double bare_energy_edg = 0.;
-    for (const Lattice::Edge& edg : tuple_edges) {
+    for (size_t edge_index = 0; edge_index < tuple_edges.size(); ++edge_index) {
+        const Lattice::Edge& edg = tuple_edges[edge_index];
         if (total_cache) { 
             bare_energy_edg = -2*lat.get_potential_edge_energy(edg);
         } else if (interval_has_no_inner_flips) {
             bare_energy_edg = lat.integrated_edge_energy_diff_no_inner_flips(
-                edg, imag_time_spin_flip, imag_time_next_spin_flip
+                edg, imag_time_spin_flip, imag_time_next_spin_flip,
+                known_flip_indices.empty() ? -1 : known_flip_indices[edge_index], known_flip_time
             );
         } else {
             bare_energy_edg = lat.integrated_edge_energy_diff(edg, imag_time_spin_flip, imag_time_next_spin_flip);
@@ -2320,7 +2324,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff_edge, pot_energy_edges_tmp, pot_energy_diffs_tmp]
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, new_imag_time, false, true
+                        imag_time_tuple_flip, new_imag_time, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
                     pot_energy_edges = pot_energy_edges_tmp;
                     pot_energy_diffs = std::move(pot_energy_diffs_tmp);
@@ -2329,7 +2333,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff_edge, pot_energy_edges_tmp, pot_energy_diffs_tmp]
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, imag_time_tuple_flip, false, true
+                        new_imag_time, imag_time_tuple_flip, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
                     pot_energy_edges = pot_energy_edges_tmp;
                     pot_energy_diffs = std::move(pot_energy_diffs_tmp);
@@ -2378,7 +2382,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, imag_time_tuple_flip, false, true
+                        new_imag_time, imag_time_tuple_flip, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
                     acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
@@ -2401,7 +2405,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, new_imag_time, false, true
+                        imag_time_tuple_flip, new_imag_time, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
                     acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
 
@@ -2424,13 +2428,13 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     auto [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, beta, false, true
+                        new_imag_time, beta, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
                     if (imag_time_tuple_flip != 0) {
                         const auto& [integrated_pot_energy_diff_2, pot_energy_edges_2, pot_energy_diffs_2] 
                         = integrated_pot_energy_diff_tuple_flip_edge(
                             lat, h, mu, J, lmbda, random_tuple, tuple_edges,
-                             0., imag_time_tuple_flip, false, true
+                             0., imag_time_tuple_flip, false, true, edge_flip_indices, imag_time_tuple_flip
                         );
                         for (size_t i = 0; i < pot_energy_edges.size(); ++i) {
                             pot_energy_diffs[i] += pot_energy_diffs_2[i];
@@ -2464,7 +2468,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, new_imag_time, false, true
+                        imag_time_tuple_flip, new_imag_time, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
 
                     acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
@@ -2488,7 +2492,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     const auto& [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        new_imag_time, imag_time_tuple_flip, false, true
+                        new_imag_time, imag_time_tuple_flip, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
 
                     acc_ratio = boltzmann_weight(integrated_pot_energy_diff);
@@ -2512,13 +2516,13 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
                     auto [integrated_pot_energy_diff, pot_energy_edges, pot_energy_diffs] 
                     = integrated_pot_energy_diff_tuple_flip_edge(
                         lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                        imag_time_tuple_flip, beta, false, true
+                        imag_time_tuple_flip, beta, false, true, edge_flip_indices, imag_time_tuple_flip
                     );
                     if (new_imag_time > 0) {
                         const auto& [integrated_pot_energy_diff_2, pot_energy_edges_2, pot_energy_diffs_2] 
                         = integrated_pot_energy_diff_tuple_flip_edge(
                             lat, h, mu, J, lmbda, random_tuple, tuple_edges, 
-                            0., new_imag_time, false, true
+                            0., new_imag_time, false, true, edge_flip_indices, imag_time_tuple_flip
                         );
                         for (size_t i = 0; i < pot_energy_edges.size(); ++i) {
                             pot_energy_diffs[i] += pot_energy_diffs_2[i];
@@ -2735,7 +2739,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
         
         std::span<const double> single_spin_flips = lat.get_single_spin_flips(edg);
         int single_spin_flip_count = single_spin_flips.size();
-        const auto next_flip_it = std::upper_bound(
+        const auto next_flip_it = detail::time_upper_bound(
             single_spin_flips.begin(), single_spin_flips.end(), tau_new
         );
         const int imag_time_next_flip_index = static_cast<int>(

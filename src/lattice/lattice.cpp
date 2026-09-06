@@ -2064,7 +2064,7 @@ int Lattice::get_anyon_count() {
 
 int Lattice::get_spin_flip_index(const Edge& edg, double tau) {
     const auto& spin_flips = g[edg].spin_flips;
-    const auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau);
+    const auto it = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), tau);
 
     int index = 0;
     if (it != spin_flips.end() && *it == tau) [[likely]] {
@@ -2077,7 +2077,7 @@ int Lattice::get_spin_flip_index(const Edge& edg, double tau) {
 
 int Lattice::get_single_spin_flip_index(const Edge& edg, double tau) {
     const auto& single_spin_flips = g[edg].single_spin_flips;
-    const auto it = std::lower_bound(single_spin_flips.begin(), single_spin_flips.end(), tau);
+    const auto it = detail::time_lower_bound(single_spin_flips.begin(), single_spin_flips.end(), tau);
 
     int index = 0;
     if (it != single_spin_flips.end() && *it == tau) [[likely]] {
@@ -2112,7 +2112,7 @@ void Lattice::delete_double_single_spin_flip(const Edge& edg,
     }
 
     auto& spin_flips = g[edg].spin_flips;
-    auto it_2 = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_next_single_spin_flip);
+    auto it_2 = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_next_single_spin_flip);
 
     if (it_2 != spin_flips.end() && *it_2 == imag_time_next_single_spin_flip) [[likely]] {
         it_2 = spin_flips.erase(it_2);
@@ -2128,7 +2128,7 @@ void Lattice::delete_double_single_spin_flip(const Edge& edg,
     spin_flips.erase(it_1);
 
     auto& single_spin_flips = g[edg].single_spin_flips;
-    auto it_s_2 = std::lower_bound(single_spin_flips.begin(), single_spin_flips.end(), imag_time_next_single_spin_flip);
+    auto it_s_2 = detail::time_lower_bound(single_spin_flips.begin(), single_spin_flips.end(), imag_time_next_single_spin_flip);
 
     if (it_s_2 != single_spin_flips.end() && *it_s_2 == imag_time_next_single_spin_flip) [[likely]] {
         it_s_2 = single_spin_flips.erase(it_s_2);
@@ -2150,7 +2150,7 @@ void Lattice::delete_single_spin_flip(const Edge& edg, int spin_flip_index) {
     spin_flips.erase(spin_flips.begin() + spin_flip_index);    
 
     auto& single_spin_flips = g[edg].single_spin_flips;
-    auto it = std::lower_bound(single_spin_flips.begin(), single_spin_flips.end(), imag_time);
+    auto it = detail::time_lower_bound(single_spin_flips.begin(), single_spin_flips.end(), imag_time);
 
     if (it != single_spin_flips.end() && *it == imag_time) [[likely]] {
         it = single_spin_flips.erase(it);
@@ -2170,7 +2170,7 @@ void Lattice::delete_double_tuple_flip(
     }
     for (const Edge& edg : tuple_edges) {
         auto& spin_flips = g[edg].spin_flips;
-        auto it_2 = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_next_tuple_flip);
+        auto it_2 = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_next_tuple_flip);
 
         if (it_2 != spin_flips.end() && *it_2 == imag_time_next_tuple_flip) [[likely]] {
             it_2 = spin_flips.erase(it_2);
@@ -2188,7 +2188,7 @@ void Lattice::delete_double_tuple_flip(
 
     if (BASIS == 'x') {
         auto& tuple_spin_flips = plaquette_flip_vector[tuple_index];
-        auto it_2 = std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_next_tuple_flip);
+        auto it_2 = detail::time_lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_next_tuple_flip);
 
         if (it_2 != tuple_spin_flips.end() && *it_2 == imag_time_next_tuple_flip) [[likely]] {
             it_2 = tuple_spin_flips.erase(it_2);
@@ -2204,7 +2204,7 @@ void Lattice::delete_double_tuple_flip(
         tuple_spin_flips.erase(it_1);
     } else {
         auto& tuple_spin_flips = g[tuple_index].star_flips;
-        auto it_2 = std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_next_tuple_flip);
+        auto it_2 = detail::time_lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_next_tuple_flip);
 
         if (it_2 != tuple_spin_flips.end() && *it_2 == imag_time_next_tuple_flip) [[likely]] {
             it_2 = tuple_spin_flips.erase(it_2);
@@ -2224,7 +2224,7 @@ void Lattice::delete_double_tuple_flip(
 void Lattice::delete_tuple_flip(int tuple_index, std::span<const Edge> tuple_edges, double imag_time_tuple_flip) {
     for (const Edge& edg : tuple_edges) {
         auto& spin_flips = g[edg].spin_flips;
-        const auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_tuple_flip);
+        const auto it = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_tuple_flip);
 
         if (it != spin_flips.end() && *it == imag_time_tuple_flip) [[likely]] {
             spin_flips.erase(it);
@@ -2235,7 +2235,7 @@ void Lattice::delete_tuple_flip(int tuple_index, std::span<const Edge> tuple_edg
 
     if (BASIS == 'x') {
         auto& tuple_spin_flips = plaquette_flip_vector[tuple_index];
-        const auto it = std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_tuple_flip);
+        const auto it = detail::time_lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_tuple_flip);
 
         if (it != tuple_spin_flips.end() && *it == imag_time_tuple_flip) [[likely]] {
             tuple_spin_flips.erase(it);
@@ -2244,7 +2244,7 @@ void Lattice::delete_tuple_flip(int tuple_index, std::span<const Edge> tuple_edg
         }
     } else {
         auto& tuple_spin_flips = g[tuple_index].star_flips;
-        const auto it = std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_tuple_flip);
+        const auto it = detail::time_lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), imag_time_tuple_flip);
 
         if (it != tuple_spin_flips.end() && *it == imag_time_tuple_flip) [[likely]] {
             tuple_spin_flips.erase(it);
@@ -2295,7 +2295,7 @@ double Lattice::flip_next_imag_time(const Edge& edg, double tau) { // TODO repla
         return tau;
     }
 
-    auto it = std::upper_bound(spin_flips.begin(), spin_flips.end(), tau);
+    auto it = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), tau);
 
     if (it != spin_flips.end()) [[likely]] {
         return *it;
@@ -2324,7 +2324,7 @@ double Lattice::flip_prev_imag_time(const Edge& edg, double tau) {
         return tau;
     }
 
-    auto it = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau);
+    auto it = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), tau);
 
     if (it != spin_flips.begin()) [[likely]] {
         return *(std::prev(it));
@@ -2366,7 +2366,7 @@ std::pair<double, double> Lattice::tuple_flip_window(
         double prev = tau;
 
         if (!spin_flips.empty()) [[likely]] {
-            const auto lower = std::lower_bound(spin_flips.begin(), spin_flips.end(), tau);
+            const auto lower = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), tau);
             // The lower bound is already at the event (normally unique).
             // Skip equal-time events without another search of the entire tail.
             auto upper = lower;
@@ -2410,10 +2410,10 @@ void Lattice::insert_double_single_spin_flip(const Edge& edg, double tau_left, d
         spin_flips.push_back(tau_left);
         spin_flips.push_back(tau_right);
     } else [[likely]] {
-        auto it_right = std::upper_bound(spin_flips.begin(), spin_flips.end(), tau_right);
+        auto it_right = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), tau_right);
         it_right = spin_flips.insert(it_right, tau_right);
 
-        auto it_left = std::lower_bound(spin_flips.begin(), it_right, tau_left);
+        auto it_left = detail::time_lower_bound(spin_flips.begin(), it_right, tau_left);
         spin_flips.insert(it_left, tau_left);
     }
 
@@ -2422,10 +2422,10 @@ void Lattice::insert_double_single_spin_flip(const Edge& edg, double tau_left, d
         single_spin_flips.push_back(tau_left);
         single_spin_flips.push_back(tau_right);
     } else [[likely]] {
-        auto it_right = std::upper_bound(single_spin_flips.begin(), single_spin_flips.end(), tau_right);
+        auto it_right = detail::time_upper_bound(single_spin_flips.begin(), single_spin_flips.end(), tau_right);
         it_right = single_spin_flips.insert(it_right, tau_right);
 
-        auto it_left = std::lower_bound(single_spin_flips.begin(), it_right, tau_left);
+        auto it_left = detail::time_lower_bound(single_spin_flips.begin(), it_right, tau_left);
         single_spin_flips.insert(it_left, tau_left);
     }
 }
@@ -2435,7 +2435,7 @@ void Lattice::insert_single_spin_flip(const Edge& edg, double tau) {
     if (spin_flips.empty()) [[unlikely]] {
         spin_flips.emplace_back(tau);
     } else [[likely]] {
-        auto right = std::upper_bound(spin_flips.begin(), spin_flips.end(), tau);
+        auto right = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), tau);
         spin_flips.insert(right, tau);
     }
 
@@ -2443,7 +2443,7 @@ void Lattice::insert_single_spin_flip(const Edge& edg, double tau) {
     if (single_spin_flips.empty()) [[unlikely]] {
         single_spin_flips.emplace_back(tau);
     } else [[likely]] {
-        auto right = std::upper_bound(single_spin_flips.begin(), single_spin_flips.end(), tau);
+        auto right = detail::time_upper_bound(single_spin_flips.begin(), single_spin_flips.end(), tau);
         single_spin_flips.insert(right, tau);
     }
 }
@@ -2464,10 +2464,10 @@ void Lattice::insert_double_tuple_flip(
             spin_flips.emplace_back(tau_left);
             spin_flips.emplace_back(tau_right);
         } else [[likely]] {
-            auto it_right = std::upper_bound(spin_flips.begin(), spin_flips.end(), tau_right);
+            auto it_right = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), tau_right);
             it_right = spin_flips.insert(it_right, tau_right);
 
-            auto it_left = std::lower_bound(spin_flips.begin(), it_right, tau_left);
+            auto it_left = detail::time_lower_bound(spin_flips.begin(), it_right, tau_left);
             spin_flips.insert(it_left, tau_left);
         }
     }
@@ -2478,10 +2478,10 @@ void Lattice::insert_double_tuple_flip(
             tuple_spin_flips.emplace_back(tau_left);
             tuple_spin_flips.emplace_back(tau_right);
         } else [[likely]] {
-            auto it_right = std::upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_right);
+            auto it_right = detail::time_upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_right);
             it_right = tuple_spin_flips.insert(it_right, tau_right);
 
-            auto it_left = std::lower_bound(tuple_spin_flips.begin(), it_right, tau_left);
+            auto it_left = detail::time_lower_bound(tuple_spin_flips.begin(), it_right, tau_left);
             tuple_spin_flips.insert(it_left, tau_left);
         }
     } else {
@@ -2490,10 +2490,10 @@ void Lattice::insert_double_tuple_flip(
             tuple_spin_flips.emplace_back(tau_left);
             tuple_spin_flips.emplace_back(tau_right);
         } else [[likely]] {
-            auto it_right = std::upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_right);
+            auto it_right = detail::time_upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_right);
             it_right = tuple_spin_flips.insert(it_right, tau_right);
 
-            auto it_left = std::lower_bound(tuple_spin_flips.begin(), it_right, tau_left);
+            auto it_left = detail::time_lower_bound(tuple_spin_flips.begin(), it_right, tau_left);
             tuple_spin_flips.insert(it_left, tau_left);
         }
     }
@@ -2505,7 +2505,7 @@ void Lattice::insert_tuple_flip(int tuple_index, std::span<const Edge> tuple_edg
         if (spin_flips.empty()) [[unlikely]] {
             spin_flips.emplace_back(tau);
         } else [[likely]] {
-            auto right = std::upper_bound(spin_flips.begin(), spin_flips.end(), tau);
+            auto right = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), tau);
             spin_flips.insert(right, tau);
         }
     }
@@ -2515,7 +2515,7 @@ void Lattice::insert_tuple_flip(int tuple_index, std::span<const Edge> tuple_edg
         if (tuple_spin_flips.empty()) [[unlikely]] {
             tuple_spin_flips.emplace_back(tau);
         } else [[likely]] {
-            auto right = std::upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau);
+            auto right = detail::time_upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau);
             tuple_spin_flips.insert(right, tau);
         }
     } else {
@@ -2523,7 +2523,7 @@ void Lattice::insert_tuple_flip(int tuple_index, std::span<const Edge> tuple_edg
         if (tuple_spin_flips.empty()) [[unlikely]] {
             tuple_spin_flips.emplace_back(tau);
         } else [[likely]] {
-            auto right = std::upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau);
+            auto right = detail::time_upper_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau);
             tuple_spin_flips.insert(right, tau);
         }
     }
@@ -2577,7 +2577,7 @@ void Lattice::move_tuple_flip(
         const Edge& edg = tuple_edges[i];
         auto& spin_flips = g[edg].spin_flips;
         const int index = edge_flip_indices.empty()
-            ? static_cast<int>(std::lower_bound(spin_flips.begin(), spin_flips.end(), tau_old) - spin_flips.begin())
+            ? static_cast<int>(detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), tau_old) - spin_flips.begin())
             : edge_flip_indices[i];
         if (no_move_over_beta) [[likely]] {
             spin_flips[index] = tau_new;
@@ -2596,7 +2596,7 @@ void Lattice::move_tuple_flip(
         auto& tuple_spin_flips = plaquette_flip_vector[tuple_index];
         const int index = tuple_flip_index >= 0
             ? tuple_flip_index
-            : static_cast<int>(std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old) - tuple_spin_flips.begin());
+            : static_cast<int>(detail::time_lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old) - tuple_spin_flips.begin());
         if (no_move_over_beta) [[likely]] {
             tuple_spin_flips[index] = tau_new;
         } else [[unlikely]] {
@@ -2612,7 +2612,7 @@ void Lattice::move_tuple_flip(
         auto& tuple_spin_flips = g[tuple_index].star_flips;
         const int index = tuple_flip_index >= 0
             ? tuple_flip_index
-            : static_cast<int>(std::lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old) - tuple_spin_flips.begin());
+            : static_cast<int>(detail::time_lower_bound(tuple_spin_flips.begin(), tuple_spin_flips.end(), tau_old) - tuple_spin_flips.begin());
         if (no_move_over_beta) [[likely]] {
             tuple_spin_flips[index] = tau_new;
         } else [[unlikely]] {
@@ -3067,8 +3067,8 @@ double Lattice::integrated_edge_energy_weighted(
 
     const auto& spin_flips = g[edg].spin_flips;  // sorted in [0, BETA)
     // find flips in [imag_time_1, imag_time_2)
-    auto lo = std::lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
-    auto hi = std::upper_bound(lo,               spin_flips.end(),  imag_time_2);
+    auto lo = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
+    auto hi = detail::time_upper_bound(lo,               spin_flips.end(),  imag_time_2);
 
     // spin just after imag_time_1 (same parity logic as your unweighted version)
     const int base_spin = get_spin(edg); // value just after tau=0
@@ -3849,7 +3849,7 @@ void Lattice::rotate_imag_time() {
     std::vector<double> shifted_times;
     const auto rotate_times = [&](std::vector<double>& times) {
         const auto pivot = static_cast<size_t>(
-            std::lower_bound(times.begin(), times.end(), tau_0) - times.begin());
+            detail::time_lower_bound(times.begin(), times.end(), tau_0) - times.begin());
         if (shifted_times.size() < times.size()) shifted_times.resize(times.size());
         const auto shift = [&](double t) {
             t -= tau_0;
