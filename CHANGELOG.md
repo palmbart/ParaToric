@@ -1,3 +1,69 @@
+# ParaToric v1.0.6 Release Notes
+
+Release date: 2026-09-06
+
+v1.0.6 is a maintenance release over v1.0.5 focused on correct native HDF5
+serialization, lower overhead in QMC event searches and imaginary-time
+rotation, and clearer API and workflow documentation.
+
+## Highlights
+
+- Fixed native HDF5 observable-series output so real values always have a zero
+  imaginary component and paired estimators retain both components.
+- Accelerated imaginary-time event searches by reusing known event positions
+  and using specialized bound searches for sorted histories.
+- Reduced imaginary-time rotation overhead with a shared temporary buffer and
+  direct time wrapping instead of per-event modulo operations.
+- Expanded and corrected documentation for the C++, C, and Python interfaces,
+  simulation outputs, and internal QMC helpers.
+
+## Fixes
+
+- Replaced direct serialization of `std::variant` storage with explicit
+  real/imaginary double fields in native sample, hysteresis, and thermalization
+  output. This avoids writing variant bookkeeping or uninitialized storage as
+  an observable's imaginary component.
+- Handle empty observable series without accessing a nonexistent first element
+  or attempting to write an empty buffer.
+
+## Performance And Internals
+
+- Added shared lower- and upper-bound helpers that use vectorization-friendly
+  rank scans for histories of 8 to 64 events and logarithmic searches otherwise.
+- Reused known flip positions to determine spin parity in event-free tuple-move
+  intervals, avoiding repeated searches during energy-difference calculations.
+- Removed redundant upper-bound searches when skipping equal-time events or
+  traversing an interval from an already located lower bound.
+- Reused one temporary buffer across spin, star, and plaquette histories during
+  imaginary-time rotation while preserving the zero-time convention.
+- Deferred the rejection-threshold division in bounded integer sampling to the
+  rare branch that needs it, preserving the random draws and unbiased results.
+
+## Documentation And Tests
+
+- Clarified parameter validation, seed behavior, custom thermalization,
+  hysteresis state reuse, snapshot output, and result-array ownership and shapes.
+- Documented raw Metropolis acceptance ratios, paired real estimators in complex
+  series, bootstrap statistics, and autocorrelation-time units.
+- Corrected README navigation, the SLURM job-script notebook link, and the
+  documented `--N_between_samples` option name.
+- Updated honeycomb QMC smoke tests to run supported Fredenhagen-Marcu workflows
+  instead of expecting an unsupported-observable exception.
+
+## Compatibility Notes
+
+- Public C++, C, and Python simulation interfaces and CLI options are unchanged.
+- HDF5 observable series retain the `series` dataset name and complex compound
+  fields `r` and `i`, with explicitly serialized double components. Readers that
+  access these fields by name, including h5py, retain the same interface.
+
+## Reference
+
+- Compared with `v1.0.5`: 5 development commits before this release metadata update.
+- Project-side changes excluding this changelog entry: 29 files changed,
+  1381 insertions, 1658 deletions.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.5...v1.0.6
+
 # ParaToric v1.0.5 Release Notes
 
 Release date: 2026-08-16
