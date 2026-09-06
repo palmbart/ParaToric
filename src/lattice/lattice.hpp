@@ -24,14 +24,28 @@
 namespace paratoric {
 
 /**
- * @class Lattice
- * @brief Data structure for storing and modifying a lattice for continuous QMC of any graph geometry.
- * 
- * TODO: This class is too large and too monolithic, split it up; externalize lattice construction
+ * @brief Graph geometry, spin histories, and bare integrals for continuous-time QMC.
+ *
+ * Spins live on edges. Each edge stores its spin at the time origin and a
+ * sorted history of all flips, with single-spin events also stored separately.
+ * Tuple events are plaquette flips in the x-basis and star flips in the z-basis.
+ * A completed QMC update must preserve periodic spin histories and keep the
+ * edge histories consistent with the separate single and tuple histories.
+ *
+ * Event times lie within one period beta. Neighbor searches wrap around the
+ * period; ordinary energy integrals take ordered, non-wrapping intervals.
+ * Bare integrals contain spin or spin-product factors only, without Hamiltonian
+ * minus signs or couplings. QMC applies those factors and maintains the active
+ * energy caches after accepting an update.
+ *
+ * Geometry and adjacency caches are built once at construction. Edge views
+ * borrow that storage; event views must be reacquired after changing the
+ * corresponding history. Indices and edge descriptors must belong to this
+ * lattice. Low-level setters do not validate these invariants.
  */
 class Lattice {    
 public:
-    // Class which is thrown in the search for percolation, see is_percolating()
+    /** @brief Control-flow exception used to stop a percolation search early. */
     class FoundPercolation : public std::exception {
         public:
             const char* what() const noexcept override {
@@ -39,41 +53,35 @@ public:
             }
     };
 
-    /**
-     * @brief Vertex properties for every vertex (i.e. lattice site) in the lattice.
-     * 
-     */
+    /** @brief Star events and coordinates at one graph vertex. */
     struct VertexData {
-        // In this vector the imaginary times of star flips are stored
+        // Sorted star-event times (off-diagonal in the z-basis).
         std::vector<double> star_flips;
-        // In this vector we store the integrated potential energy of the star
+        // Cached integral of the star spin product over [0, beta], used in x.
         double integrated_star_energy;
-        // These are the real space coordinates of the lattice site
+        // Real-space coordinates used by geometry-dependent observables.
         double x = 0.;
         double y = 0.;
         double z = 0.;
     };
 
-    /**
-     * @brief Edge properties for every edge (i.e. link between lattice sites) in the lattice.
-     * 
-     */
+    /** @brief Spin history, bare edge integral, and geometry of one graph edge. */
     struct EdgeData {
-        // This int (+1 or -1) stores the local spin at imaginary time zero (beta)
+        // Spin (+1 or -1) at the time origin; beta is identified with zero.
         int spin = 1;
         // Legacy GraphML property. Production snapshot histories are spooled to disk.
         std::string spin_string = "";
-        // In this vector the imaginary times of any type of spin flip (single or tuple) are stored
+        // Sorted times of all spin flips, including events contributed by tuples.
         std::vector<double> spin_flips; 
-        // In this vector the imaginary times of single spin flips are stored
+        // Sorted single-spin events, also present in spin_flips.
         std::vector<double> single_spin_flips; 
-        // In this vector we store the integrated potential energy of the edge
+        // Cached integral of the spin over [0, beta], without sign or coupling.
         double integrated_edge_energy;
-        // In this vector we store all the plaquettes of which this edge is part of 
+        // Indices of adjacent plaquettes, populated by build_caches_().
         std::vector<int> part_of_plaquette_lookup;
         int source_vertex = -1;
         int target_vertex = -1;
-        // For the cubic lattice, this is x, y or z. Important for cube percolation
+        // Cubic edge direction (x, y, or z), used by cube percolation.
         std::string orientation;
 
         EdgeData(std::string o = "x") : orientation(o){ }
@@ -108,7 +116,7 @@ public:
      */
     Lattice(const LatSpec& lat_spec, std::shared_ptr<RNG> rng = nullptr) : rng(rng ? std::move(rng) : std::make_shared<RNG>()) {
         BASIS = lat_spec.basis;
-        // Set LATTICE_DIMENSIONALITY later automatically
+        // Geometry construction determines LATTICE_DIMENSIONALITY.
         LATTICE_TYPE = lat_spec.lattice_type;
         SYSTEM_SIZE = lat_spec.system_size;
         BETA = lat_spec.beta;
@@ -129,217 +137,140 @@ public:
         build_caches_();
         init_potential_energy();
 
-        // Useful for debugging
-        //write_graph("graph", "./");
     }  
 
+    /** @brief Create an uninitialized placeholder; assign a constructed lattice before use. */
     Lattice() = default; 
     ~Lattice() = default;
 
     Lattice(Lattice const&) = default;
     Lattice& operator=(Lattice const&) = default;
 
-    /**
-     * @brief Returns the total number of non-strings, i.e. links with spin +1.
-     * 
-     * @return total number of links with spin +1
-     * 
-     */
+    /** @brief Count edges with spin +1 at the time origin. */
     inline int get_non_string_count();
 
-    /**
-     * @brief Returns the total number of strings, i.e. links with spin -1.
-     * 
-     * @return total number of links with spin -1
-     * 
-     */
+    /** @brief Count edges with spin -1 at the time origin. */
     inline int get_string_count();
 
-    /**
-     * @brief Returns the total number of vertices in the graph.
-     * 
-     * @return number of vertices
-     * 
-     */
+    /** @brief Return the number of graph vertices. */
     inline int get_vertex_count();
 
-    /**
-     * @brief Returns the total number of edges in the graph.
-     * 
-     * @return number of edges
-     * 
-     */
+    /** @brief Return the number of graph edges. */
     inline int get_edge_count();
 
-    /**
-     * @brief Returns the total number of plaquettes in the graph.
-     * 
-     * @return number of plaquettes
-     * 
-     */
+    /** @brief Return the number of elementary plaquettes. */
     inline int get_plaquette_count();
 
-    /**
-     * @brief Returns the total number of cubes in the graph.
-     * 
-     * @return number of cubes
-     * 
-     */
+    /** @brief Return the number of elementary cubes. */
     inline int get_cube_count();
 
-    /**
-     * @brief Returns the anyon count (e-anyons in the x-basis, m-anyons in the z-basis).
-     * 
-     * @return total anyon count
-     * 
-     */
+    /** @brief Count star defects in x or plaquette defects in z at the time origin. */
     int get_anyon_count();
 
     /**
-     * @brief Set the internal (pseudo-)random number generator.
-     * 
-     * @param rng_inp the random number generator of type RNG
-     * 
+     * @brief Replace the shared RNG used for lattice proposals and time rotations.
+     * @param rng_inp Non-null shared generator; ownership is shared, not cloned.
      */
     void set_rng(std::shared_ptr<RNG>& rng_inp);
 
-    /**
-     * @brief Get the internal (pseudo-)random number generator.
-     * 
-     * @return random number generator stored in the Lattice instance
-     * 
-     */
+    /** @brief Return shared ownership of the lattice's RNG. */
     std::shared_ptr<RNG> get_rng();
 
+    /** @brief Return the edge spin at the time origin. */
     inline int get_spin(const Edge& edg);
+    /** @brief Read the cached bare edge integral over [0, beta]. */
     inline double get_potential_edge_energy(const Edge& edg);
+    /** @brief Replace the cached bare edge integral. */
     inline void set_potential_edge_energy(const Edge& edg, double potential_energy);
+    /** @brief Add a bare integral change to the edge cache. */
     inline void add_potential_edge_energy(const Edge& edg, double diff);
+    /** @brief Read the cached bare star integral (maintained in the x-basis). */
     inline double get_potential_star_energy(int star_index);
+    /** @brief Replace the cached bare star integral. */
     inline void set_potential_star_energy(int star_index, double potential_energy);
+    /** @brief Add a bare integral change to the star cache. */
     inline void add_potential_star_energy(int star_index, double diff);
+    /** @brief Read the cached bare plaquette integral (maintained in the z-basis). */
     inline double get_potential_plaquette_energy(int plaquette_index);
+    /** @brief Replace the cached bare plaquette integral. */
     inline void set_potential_plaquette_energy(int plaquette_index, double potential_energy);
+    /** @brief Add a bare integral change to the plaquette cache. */
     inline void add_potential_plaquette_energy(int plaquette_index, double diff);
 
-    /**
-     * @brief Returns the orientation at the Edge edg.
-     * 
-     * @param edg the edge whose orientation is returned
-     * 
-     * @return orientation at edg
-     * 
-     */
+    /** @brief Return the edge's geometry-specific direction label. */
     inline std::string get_orientation(const Edge& edg);
 
-    /**
-     * @brief Returns the imaginary time of the spin flip with index spin_flip_index at Edge edg.
-     * 
-     * @param edg the edge where the spin flip is located
-     * @param spin_flip_index the index of the spin flip 
-     * 
-     * @return imaginary time of spin flip
-     * 
-     */
+    /** @brief Return a time by index in the edge's full flip history. */
     inline double get_spin_flip_imag_time(const Edge& edg, int spin_flip_index);
 
     /**
-     * @brief Returns the index of the spin flip with imaginary time tau at Edge edg.
-     * 
-     * @details Throw std::runtime_error when imaginary time is not found.
-     * 
-     * @param edg the edge where the spin flip is located
-     * @param tau the imaginary time of the spin flip 
-     * 
-     * @return index of spin flip
-     * 
+     * @brief Find the first exact occurrence of tau in the edge's full history.
+     * @return Zero-based index in that history.
+     * @throws std::runtime_error If no event has exactly the requested time.
      */
     int get_spin_flip_index(const Edge& edg, double tau);
 
     /**
-     * @brief Returns the index of the single spin flip with imaginary time tau at Edge edg.
-     * 
-     * @details Throw std::runtime_error when imaginary time is not found.
-     * 
-     * @param edg the edge where the spin flip is located
-     * @param tau the imaginary time of the spin flip 
-     * 
-     * @return index of spin flip
-     * 
+     * @brief Find the first exact occurrence of tau in the edge's single-spin history.
+     * @return Zero-based index in that history.
+     * @throws std::runtime_error If no event has exactly the requested time.
      */
     int get_single_spin_flip_index(const Edge& edg, double tau);
 
     /**
-     * @brief Returns the single spin flip vector at Edge edg.
-     * 
-     * @param edg the edge on which the single spin flips should be returned
-     * 
-     * @return a vector containing the single spin flips at Edge edg
-     * 
+     * @brief Borrow the sorted single-spin event times on edg.
+     * @return Read-only view; reacquire it after mutating this edge's event history.
      */
     std::span<const double> get_single_spin_flips(const Edge& edg);
 
     /**
-     * @brief Returns the tuple spin flip vector at tuple with tuple_index t_index.
-     * 
-     * @param t_index the index of the tuple
-     * @return a vector containing the tuple spin flips at tuple t_index
-     * 
+     * @brief Borrow the sorted event times of an update tuple.
+     * @param t_index Plaquette index in the x-basis, or star center in the z-basis.
+     * @return Read-only view; reacquire it after mutating this tuple's history.
      */
     std::span<const double> get_tuple_spin_flips(int t_index);
 
     /**
-     * @brief Change the imaginary time of the spin flip with index spin_flip_index at Edge edg to imag_time.
-     * 
-     * @param edg the edge where the spin flip is located
-     * @param spin_flip_index the index of the spin flip 
-     * @param imag_time new imaginary time
-     * 
+     * @brief Overwrite one time in the edge's full history.
+     * @pre The index is valid and the replacement preserves sorted order.
+     * @note Updates only this history; the caller must synchronize related histories.
      */
     inline void set_spin_flip_imag_time(
         const Edge& edg, int spin_flip_index, double imag_time
     );
 
     /**
-     * @brief Change the imaginary time of the single spin flip with index spin_flip_index at Edge edg to imag_time.
-     * 
-     * @param edg the edge where the spin flip is located
-     * @param spin_flip_index the index of the spin flip 
-     * @param imag_time new imaginary time
-     * 
+     * @brief Overwrite one time in the edge's single-spin history.
+     * @pre The index is valid and the replacement preserves sorted order.
+     * @note Updates only this history; the caller must synchronize related histories.
      */
     inline void set_single_spin_flip_imag_time(
         const Edge& edg, int spin_flip_index, double imag_time
     );
 
     /**
-     * @brief Deletes the imaginary time of the single spin flips with imaginary times imag_time_single_spin_flip and imag_time_next_single_spin_flip at Edge edg.
-     * 
-     * @param edg the edge where the single spin flips are deleted
-     * @param imag_time_single_spin_flip the imaginary time of the single spin flip 
-     * @param imag_time_next_single_spin_flip the imaginary time of the next single spin flip
-     * 
+     * @brief Remove two ordered single-spin times from both edge histories.
+     * @pre Both events exist and imag_time_single_spin_flip < imag_time_next_single_spin_flip.
+     * @throws std::runtime_error If a requested event is absent.
      */
     void delete_double_single_spin_flip(
         const Edge& edg, double imag_time_single_spin_flip, double imag_time_next_single_spin_flip
     );
 
     /**
-     * @brief Deletes the imaginary time of the single spin flip with index spin_flip_index_1 at Edge edg.
-     * 
-     * @param edg the edge where the single spin flip is deleted
-     * @param spin_flip_index the index of the single spin flip 
-     * 
+     * @brief Remove a single-spin event from both of an edge's histories.
+     * @param spin_flip_index Index in the full history, not the single-spin history.
+     * @pre The indexed event is a single-spin event.
+     * @throws std::runtime_error If the corresponding single-spin event is absent.
      */
     void delete_single_spin_flip(const Edge& edg, int spin_flip_index);
 
     /**
-     * @brief Deletes the imaginary times of the tuple flips with imaginary time imag_time_tuple_flip and imag_time_next_tuple_flip at the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param imag_time_tuple_flip the imaginary time of the tuple flip 
-     * @param imag_time_next_tuple_flip the imaginary time of the next tuple flip 
-     * 
+     * @brief Remove two tuple events from the tuple and its edge histories.
+     * @param tuple_index Plaquette index in x, or star center in z.
+     * @param tuple_edges Edges belonging to tuple_index.
+     * @pre The requested times exist in increasing order in every affected history.
+     * @throws std::runtime_error If a requested event is absent.
      */
     void delete_double_tuple_flip(
         int tuple_index, 
@@ -349,88 +280,58 @@ public:
     );
 
     /**
-     * @brief Deletes the imaginary time of the tuple flip with imaginary time imag_time_tuple_flip at the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param imag_time_tuple_flip the imaginary time of the tuple flip 
-     * 
+     * @brief Remove one tuple event from the tuple and its edge histories.
+     * @param tuple_index Plaquette index in x, or star center in z.
+     * @param tuple_edges Edges belonging to tuple_index.
+     * @pre The requested time exists in every affected history.
+     * @throws std::runtime_error If a requested event is absent.
      */
     void delete_tuple_flip(
         int tuple_index, std::span<const Edge> tuple_edges, double imag_time_tuple_flip
     );
 
     /**
-     * @brief Calculates whether there is a tuple flip at imaginary time tau on all edges of the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau the imaginary time of the potential tuple flip 
-     * 
-     * @return true if there is a tuple flip at tau else false
-     * 
+     * @brief Test whether every tuple edge has an event at exactly tau.
+     * @note Checks full edge histories, not the tuple's separate event list.
+     *       Coincident single-spin events also satisfy this test.
      */
     bool check_tuple_flip_present_tuple(std::span<const Edge> tuple_edges, double tau);
 
     /**
-     * @brief Calculates whether there is a plaquette flip at imaginary time tau at the plaquettes that contain the Edge edg.
-     * 
-     * @param edg the edge which is part of plaquettes
-     * @param tau the imaginary time of the potential plaquette flip(s)
-     * 
-     * @return true if there is a plaquette flip at tau else false
-     * 
+     * @brief Test adjacent plaquettes for coincident events on all their edges.
+     * @see check_tuple_flip_present_tuple() for the event-presence criterion.
      */
     bool check_plaquette_flip_at_edge(const Edge& edg, double tau);
 
     /**
-     * @brief Calculates whether there is a star flip at imaginary time tau at the stars that contain the Edge edg.
-     * 
-     * @param edg the edge which is part of stars
-     * @param tau the imaginary time of the potential star flip(s)
-     * 
-     * @return true if there is a star flip at tau else false
-     * 
+     * @brief Test both endpoint stars for coincident events on all their edges.
+     * @see check_tuple_flip_present_tuple() for the event-presence criterion.
      */
     bool check_star_flip_at_edge(const Edge& edg, double tau);
 
-    /**
-     * @brief Calculates whether there is a spin flip at imaginary times tau_1 or tau_2 at the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau the imaginary time of the potential spin flip
-     * 
-     * @return true if there is a tuple flip at tau_1 or tau_2 else false
-     * 
-     */
+    /** @brief Test whether any tuple edge has an event at exactly tau. */
     bool check_spin_flips_present_tuple(std::span<const Edge> tuple_edges, double tau);
 
     /**
-     * @brief Calculates the imaginary time of the next spin flip (of any type) after tau at the edge edg. 
-     * If there is a spin_flip at tau, the next spin flip (possibly going over beta) is returned. 
-     * If there is no spin flip, tau is returned. 
-     * If there is at least one spin flip but not at tau, the next spin flip after tau (possibly going over beta) is returned.
-     * 
-     * @param edg the edge of interest
-     * @param tau the imaginary time after which we look for a spin flip
-     * 
-     * @return imaginary time of next spin flip (of any type)
-     * 
+     * @brief Find the neighboring event strictly after tau, wrapping at beta.
+     * @return A time in the stored period; tau if the edge has no events.
+     *         A history containing only tau also returns tau after wrapping.
      */
     double flip_next_imag_time(const Edge& edg, double tau);
 
-    /**
-     * @brief Calculates the imaginary times of the next spin flips (of any type) after tau at the tuple with edges tuple_edges. 
-     * If there is a spin_flip at tau, the next spin flip (possibly going over beta) is returned. 
-     * If there is no spin flip, tau is returned. 
-     * If there is at least one spin flip but not at tau, the next spin flip after tau (possibly going over beta) is returned.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau the imaginary time after which we look for spin flips
-     * 
-     * @return vector of imaginary times of next spin flips (of any type), see code for order of edges
-     * 
-     */
+    /** @brief Apply flip_next_imag_time() to each edge, preserving tuple_edges order. */
     std::vector<double> flip_next_imag_times_tuple(std::span<const Edge> tuple_edges, double tau);
+    /** @brief Small-vector version of flip_next_imag_times_tuple(). */
     SmallEnergyVector flip_next_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau);
+    /**
+     * @brief Intersect neighboring-event windows around a tuple event at tau.
+     * @param tuple_edges Edges of the tuple.
+     * @param tau Event time present on every edge for a tuple-move proposal.
+     * @param flip_indices Optional output ranks in full edge histories, in input order.
+     * @return (left, right) modulo beta; a wrapped interval can have left > right.
+     * @note Edges without events constrain the window to tau and add no rank.
+     *       The optional ranks are complete only when every edge has a history.
+     */
     std::pair<double, double> tuple_flip_window(
         std::span<const Edge> tuple_edges,
         double tau,
@@ -438,97 +339,71 @@ public:
     );
 
     /**
-     * @brief Calculates the imaginary time of the previous spin flip (of any type) before tau at the edge edg. 
-     * If there is a spin_flip at tau, the previous spin flip (possibly going over beta) is returned. 
-     * If there is no spin flip, tau is returned. 
-     * If there is at least one spin flip but not at tau, the previous spin flip before tau (possibly going over beta) is returned.
-     * 
-     * @param edg the edge of interest
-     * @param tau the imaginary time before which we look for a spin flip
-     * 
-     * @return imaginary time of previous spin flip (of any type)
-     * 
+     * @brief Find the neighboring event strictly before tau, wrapping at beta.
+     * @return A time in the stored period; tau if the edge has no events.
+     *         A history containing only tau also returns tau after wrapping.
      */
     double flip_prev_imag_time(const Edge& edg, double tau);
 
-    /**
-     * @brief Calculates the imaginary times of the previous spin flips (of any type) before tau at the tuple with edges tuple_edges. 
-     * If there is a spin_flip at tau, the previous spin flip (possibly going over beta) is returned. 
-     * If there is no spin flip, tau is returned. 
-     * If there is at least one spin flip but not at tau, the previous spin flip before tau (possibly going over beta) is returned.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau the imaginary time before which we look for spin flips
-     * 
-     * @return vector of imaginary times of previous spin flips (of any type), see code for order of edges
-     * 
-     */
+    /** @brief Apply flip_prev_imag_time() to each edge, preserving tuple_edges order. */
     std::vector<double> flip_prev_imag_times_tuple(std::span<const Edge> tuple_edges, double tau);
+    /** @brief Small-vector version of flip_prev_imag_times_tuple(). */
     SmallEnergyVector flip_prev_imag_times_tuple_small(std::span<const Edge> tuple_edges, double tau);
 
     /**
-     * @brief Inserts the imaginary time of the spin flips with imaginary times tau_left and tau_right at Edge edg.
-     * 
-     * @param edg the edge where the spin flips are inserted
-     * @param tau_left the imaginary time of the first single spin flip 
-     * @param tau_right the imaginary time of the second single spin flip
-     * 
+     * @brief Insert two times into both an edge's full and single-spin histories.
+     * @pre 0 <= tau_left < tau_right <= beta; the caller prevents unwanted coincidences.
      */
     void insert_double_single_spin_flip(const Edge& edg, double tau_left, double tau_right);
 
     /**
-     * @brief Inserts the imaginary time of the spin flip with imaginary time tau at Edge edg.
-     * 
-     * @param edg the edge where the single spin flip is inserted
-     * @param tau the imaginary time of the single spin flip 
-     * 
+     * @brief Insert tau into both an edge's full and single-spin histories.
+     * @pre tau is in the stored time period; the caller prevents unwanted coincidences.
      */
     void insert_single_spin_flip(const Edge& edg, double tau);
 
     /**
-     * @brief Inserts the imaginary times of the tuple flips with imaginary time tau_left and tau_right at the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau_left the imaginary time of the first tuple flip 
-     * @param tau_right the imaginary time of the second tuple flip 
-     * 
+     * @brief Insert two events into the tuple history and every tuple edge's full history.
+     * @param tuple_index Plaquette index in x, or star center in z.
+     * @param tuple_edges Edges belonging to tuple_index.
+     * @pre 0 <= tau_left < tau_right <= beta; the caller prevents unwanted coincidences.
+     * @throws std::invalid_argument If tau_right < tau_left.
      */
     void insert_double_tuple_flip(
         int tuple_index, std::span<const Edge> tuple_edges, double tau_left, double tau_right
     );
 
     /**
-     * @brief Inserts the imaginary time of the tuple flip with imaginary time tau at the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau the imaginary time of the tuple flip 
-     * 
+     * @brief Insert an event into the tuple history and every tuple edge's full history.
+     * @param tuple_index Plaquette index in x, or star center in z.
+     * @param tuple_edges Edges belonging to tuple_index.
+     * @pre tau lies in the stored time period; the caller prevents unwanted coincidences.
      */
     void insert_tuple_flip(int tuple_index, std::span<const Edge> tuple_edges, double tau);
 
     /**
-     * @brief Move the imaginary time of the spin flip with index spin_flip_index to imaginary time tau_new at Edge edg. 
-     * no_move_over_beta specifies if the move is going over beta (false) or not (true).
-     * 
-     * @param edg the edge where the single spin flip is inserted
-     * @param spin_flip_index the (old) spin flip index of the spin before the move
-     * @param tau_new the new imaginary time
-     * @param no_move_over_beta if the move is going over beta (false) or not (true) 
-     * 
+     * @brief Move a single-spin event in both edge histories.
+     * @param spin_flip_index Index of the single event in the full edge history.
+     * @param tau_new New time within the neighboring-event window.
+     * @param no_move_over_beta False when the event crosses the time origin.
+     * @pre No other event is crossed, except through the periodic time boundary.
+     * @note The caller reverses the time-origin spin for a boundary crossing and
+     *       applies the corresponding energy-cache changes.
      */
     void move_spin_flip(const Edge& edg, int spin_flip_index, double tau_new, bool no_move_over_beta);
 
     /**
-     * @brief Move the imaginary time of the tuple flip with old imaginary time tau_old to imaginary time tau_new at the tuple with edges tuple_edges.
-     * no_move_over_beta specifies if the move is going over beta (false) or not (true).
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * @param tau_old the (old) imaginary time of the tuple flip before the move
-     * @param tau_new the (new) imaginary time of the tuple flip after the move
-     * @param no_move_over_beta if the move is going over beta (false) or not (true) 
-     * @param edge_flip_indices optional precomputed position of the tuple flip on each edge
-     * @param tuple_flip_index optional precomputed position in the tuple's own flip vector
-     * 
+     * @brief Move a tuple event in its history and all affected edge histories.
+     * @param tuple_index Plaquette index in x, or star center in z.
+     * @param tuple_edges Edges belonging to tuple_index.
+     * @param tau_old Existing tuple-event time.
+     * @param tau_new New time within the common neighboring-event window.
+     * @param no_move_over_beta False when the event crosses the time origin.
+     * @param edge_flip_indices Optional full-history ranks, aligned with tuple_edges.
+     * @param tuple_flip_index Optional tuple-history rank; -1 requests a search.
+     * @pre The event exists and crosses no other event except through the time boundary.
+     * @throws std::invalid_argument If a nonempty edge_flip_indices has the wrong size.
+     * @note The caller reverses time-origin spins for boundary crossings and updates caches.
      */
     void move_tuple_flip(
         int tuple_index, 
@@ -540,99 +415,63 @@ public:
         int tuple_flip_index = -1
     );
 
-    /**
-     * @brief Print all spins at imaginary time 0.
-     * 
-     */
+    /** @brief Print every edge's spin at the time origin to standard output. */
     void print_spins();
 
-    /**
-     * @brief Print all imaginary times of spin flips at Edge edg.
-     * 
-     * @param edg the edge whose spin flips are printed 
-     * 
-     */
+    /** @brief Print the full event history of one edge to standard output. */
     void print_spin_flip_imag_times(const Edge& edg);
 
-    /**
-     * @brief Print all imaginary times of spin flips at the tuple with edges tuple_edges.
-     * 
-     * @param tuple_edges the vector which stores the edges of the tuple
-     * 
-     */
+    /** @brief Print the full event history of each tuple edge to standard output. */
     void print_tuple_flip_imag_times(std::span<const Edge> tuple_edges);
 
-    /**
-     * @brief Return the number of spin flips at Edge edg.
-     * 
-     * @param edg the edge whose number of spin flips is returned 
-     * 
-     * @return number of spin flips on edg
-     */
+    /** @brief Count all single and tuple events in an edge's full history. */
     inline int get_spin_flip_count(const Edge& edg);
 
-    /**
-     * @brief Flips the spin on edge edg.
-     * 
-     * @param edg the edge where the spin is flipped
-     * 
-     */
+    /** @brief Reverse one edge's spin at the time origin; histories and caches are unchanged. */
     void flip_spin(const Edge& edg);
 
-    /**
-     * @brief Flips the spins on the star with center v.
-     * 
-     * @param v the star center vertex 
-     * 
-     */
+    /** @brief Reverse the time-origin spins incident to vertex v; caches are unchanged. */
     void flip_star(int v);
+    /**
+     * @brief Return the edge connecting two vertices.
+     * @pre The edge exists; only debug builds throw std::runtime_error if it is absent.
+     */
     inline Edge edge_in_between(int v_1, int v_2);
+    /** @brief Test whether two vertices share an edge. */
     inline bool exists_edge(int v_1, int v_2);
+    /** @brief Return the source and target vertex indices of an edge. */
     inline std::pair<int, int> vertices_of_edge(const Edge& edg);
 
-    /**
-     * @brief Return randomly selected edge from graph.
-     * 
-     * @return tuple of the edge descriptor, the source vertex and the target vertex of the selected edge
-     * 
-     */
+    /** @brief Draw a uniform edge and return (descriptor, source vertex, target vertex). */
     std::tuple<Edge, int, int> get_random_edge();
+    /** @brief Draw a uniform edge descriptor using the shared RNG. */
     Edge get_random_edge_descriptor();
 
-    /**
-     * @brief Return randomly selected vertex from graph.
-     * 
-     * @return the index of the random vertex
-     * 
-     */
+    /** @brief Draw a vertex index uniformly using the shared RNG. */
     int get_random_vertex();
 
-    /**
-     * @brief Returns the plaquette index of a random plaquette.
-     * 
-     * @return random plaquette index
-     * 
-     */
+    /** @brief Draw a plaquette index uniformly using the shared RNG. */
     int get_random_plaquette_index();
+    /** @brief Copy the vertex pairs defining a plaquette's edges, in construction order. */
     std::vector<std::pair<int,int>> get_plaquette_vertex_pairs(int p_index);
+    /** @brief Copy the vertex indices defining an elementary cube. */
     std::vector<int> get_cube_vertices(int c_index);
+    /** @brief Borrow cached plaquette edges in construction order; valid while the geometry lives. */
     inline std::span<const Edge> get_plaquette_edges(int p_index);
+    /** @brief Borrow cached incident edges at a star center; valid while the geometry lives. */
     inline std::span<const Edge> get_star_edges(int center_index);
+    /** @brief Sum the tuple's spins at the time origin. */
     int get_tuple_sum(std::span<const Edge> tuple_edges);
+    /** @brief Multiply the tuple's spins at the time origin. */
     int get_tuple_prod(std::span<const Edge> tuple_edges);
+    /** @brief Reverse the tuple's time-origin spins; histories and caches are unchanged. */
     void flip_tuple(std::span<const Edge> tuple_edges);
+    /** @brief Multiply all time-origin spins incident to vertex v. */
     int get_vertex_nn_spins_prod(int v);
 
     /**
-     * @brief Return the tuple energy DIFFERENCE (integrated over imaginary time) of the tuple with edges tuple_edges when flipping the spin 
-     * on one edge in the tuple between the imaginary times imag_time_1 and imag_time_2.
-     * 
-     * @param tuple_edges the edges of the tuple
-     * @param imag_time_1 the lower bound for imaginary time
-     * @param imag_time_2 the upper bound for imaginary time
-     * 
-     * @return the tuple energy difference
-     * 
+     * @brief Return -2 times the bare tuple integral for a spin-product reversal.
+     * @pre imag_time_1 < imag_time_2; split wrapped intervals at beta.
      */
     double integrated_tuple_energy_diff(
         std::span<const Edge> tuple_edges, 
@@ -641,16 +480,12 @@ public:
     );
 
     /**
-     * @brief Return the tuple energy DIFFERENCE (integrated over imaginary time) of the tuple with edges tuple_edges when flipping the spins in spin_flip_lookup
-     * in the relevant time interval from imag_time_1 to imag_time_2.
-     * 
-     * @param tuple_edges the edges of the tuple
-     * @param imag_time_1 the lower bound for imaginary time
-     * @param imag_time_2 the upper bound for imaginary time
-     * @param spin_flip_lookup contains pairs with the imaginary time of the spin flip and the spin flip type (1: tuple, 0: single)
-     * 
-     * @return the tuple energy difference
-     * 
+     * @brief Integrate a tuple-product change from a local combination schedule.
+     * @param spin_flip_lookup Sorted (time, type) events: exactly one tuple event
+     *        tagged 1, plus one single event tagged 0 for each overlapping edge.
+     * @note Equal-time events combine by parity. The tuple event toggles the local
+     *       product only for odd overlap. imag_time_2 is the history-integration
+     *       cutoff; later schedule intervals use the product at that cutoff.
      */
     inline double integrated_tuple_energy_diff_combination(
         std::span<const Edge> tuple_edges, 
@@ -660,48 +495,21 @@ public:
     );
 
     /**
-     * @brief Return the tuple energy (integrated over imaginary time) of the tuple with edges tuple_edges between the imaginary times imag_time_1 and imag_time_2.
-     * 
-     * @param tuple_edges the edges of the tuple
-     * @param imag_time_1 the lower bound for imaginary time
-     * @param imag_time_2 the upper bound for imaginary time
-     * 
-     * @return the tuple energy
-     * 
+     * @brief Integrate the product of tuple spins without a minus sign or coupling.
+     * @pre Use ordered, non-wrapping bounds within [0, beta].
+     * @return Bare integral; zero if imag_time_1 >= imag_time_2.
      */
     inline double integrated_tuple_energy(
         std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
     );
 
     /**
-     * @brief Integrated STAR–energy difference for the two stars incident to an edge.
-     *
-     * Computes the (bare) change of each star’s energy, integrated over the
-     * imaginary-time interval [@p imag_time_1, @p imag_time_2], when the spin on
-     * @p edg is flipped across that interval. The two affected stars are the ones
-     * centered at the edge’s source and target vertices. Returns their individual
-     * contributions and their sum. Couplings are NOT applied here.
-     *
-     * @param edg            Edge whose spin is flipped; its endpoints define the two stars.
-     * @param imag_time_1    Lower bound of imaginary time (inclusive).
-     * @param imag_time_2    Upper bound of imaginary time (inclusive).
-     * @param total_cache    If true, use the cached integrated star energies and
-     *                       return @c -2 * cache for each of the two stars. This is
-     *                       a constant-time fast path intended for full-period flips
-     *                       (e.g., [0, β]). Do not set true for partial intervals.
-     *
-     * @return std::tuple<
-     *           double,                 // sum of bare star-energy differences for the two stars
-     *           std::vector<int>,       // star centers (vertex indices), order: [source_v, target_v]
-     *           std::vector<double>     // per-star bare energy differences on [t1,t2],
-     *                                   // aligned with the centers vector
-     *         >
-     *
-     * @pre @p imag_time_2 > @p imag_time_1. The interval must be non-zero.
-     * @throws std::invalid_argument if @p imag_time_1 == @p imag_time_2.
-     *
-     * @note “Bare” means no coupling strength factors are applied here.
-     *       Apply couplings externally when forming acceptance ratios or totals.
+     * @brief Bare star-integral changes when one edge is reversed on a time interval.
+     * @param total_cache Use -2 * cached integrals only for a full-period flip.
+     * @return (sum, affected indices, aligned per-star changes), ordered by
+     *         source and target vertices. No coupling or Hamiltonian minus sign is applied.
+     * @pre imag_time_1 < imag_time_2; split wrapped intervals at beta.
+     * @throws std::invalid_argument If the bounds are equal.
      */
     std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_star_energy_diff(
@@ -709,98 +517,33 @@ public:
     );
 
     /**
-     * @brief Integrated plaquette-energy difference around an edge on a time interval.
-     *
-     * Computes, for every plaquette that touches @p edg, the bare energy change
-     * when flipping the spin on @p edg over the imaginary-time interval 
-     * [@p imag_time_1, @p imag_time_2]. Returns both the per-plaquette
-     * contributions and their sum. Couplings strengths are NOT applied here.
-     *
-     * @param edg            Edge whose spin is flipped.
-     * @param imag_time_1    Lower bound of imaginary time (inclusive).
-     * @param imag_time_2    Upper bound of imaginary time (inclusive).
-     * @param total_cache    If true, use the cached integrated plaquette energy and
-     *                       return @c -2 * cache for each adjacent plaquette. This
-     *                       is a constant-time fast path intended for full-period
-     *                       flips (i.e. [0, β]). Do not set true for partial
-     *                       intervals.
-     *
-     * @return std::tuple<
-     *           double,                 // sum over adjacent plaquettes of their bare energy differences
-     *           std::vector<int>,       // plaquette indices touching @p edg (same order as adjacency)
-     *           std::vector<double>     // per-plaquette bare energy differences on [t1,t2]
-     *         >
-     *
-     * @pre imag_time_2 > imag_time_1.  The interval must be non-zero.
-     * @throws std::invalid_argument if @p imag_time_1 == @p imag_time_2.
-     *
-     * @note “Bare” means no coupling factors are applied. Apply coupling strength factors externally.
-     * @note The two output vectors have the same length: the plaquette coordination of @p edg
-     *       (typically 2 in 2D). Their order matches @c g[edg].part_of_plaquette_lookup.
+     * @brief Bare plaquette-integral changes when one edge is reversed on a time interval.
+     * @param total_cache Use -2 * cached integrals only for a full-period flip.
+     * @return (sum, affected indices, aligned per-plaquette changes), ordered by
+     *         the edge's plaquette adjacency list. No coupling or Hamiltonian minus sign is applied.
+     * @pre imag_time_1 < imag_time_2; split wrapped intervals at beta.
+     * @throws std::invalid_argument If the bounds are equal.
      */
     std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_plaquette_energy_diff(
         const Edge& edg, double imag_time_1, double imag_time_2, bool total_cache
     );
 
-    /**
-     * @brief Return the total star energy (integrated over imaginary time) of all stars 
-     * between the imaginary times 0 and beta.
-     * 
-     * @return the total integrated star energy
-     * 
-     */
+    /** @brief Recompute the sum of bare star integrals over [0, beta]. */
     double total_integrated_star_energy();
 
-    /**
-     * @brief Return the total plaquette energy (integrated over imaginary time) of all plaquettes 
-     * between the imaginary times 0 and beta.
-     * 
-     * @return the total integrated plaquette energy
-     * 
-     */
+    /** @brief Recompute the sum of bare plaquette integrals over [0, beta]. */
     double total_integrated_plaquette_energy();
 
     /**
-     * @brief Integrated STAR–energy difference for a plaquette–plus–single–flip combination update.
-     *
-     * For each star centered at a vertex touched by any edge in @p plaquette_edges,
-     * this computes the (bare) change of the star energy integrated over the
-     * imaginary-time interval [@p imag_time_1, @p imag_time_2], when a tuple flip
-     * occurs at @p imag_time_tuple_flip and selected single-edge flips occur on the
-     * edges of @p plaquette_edges at the times given in @p spin_flip_lookup.
-     * The result returns the per-star contributions and their sum. Couplings are
-     * NOT applied here.
-     *
-     * @param plaquette_index    The index of the plaquette under consideration.
-     *                           The edges of this plaquette determine which stars (their incident
-     *                           vertices) are affected.
-     * @param imag_time_1        Lower bound of imaginary time (inclusive).
-     * @param imag_time_2        Upper bound of imaginary time (inclusive).
-     * @param spin_flip_lookup   Per-edge flip times aligned with @p plaquette_edges:
-     *                           @c spin_flip_lookup[k] is the imaginary time of the
-     *                           single spin flip on @c plaquette_edges[k]. Only those
-     *                           edges that belong to a given star contribute to that
-     *                           star’s local flip schedule.
-     * @param imag_time_tuple_flip  Imaginary time of the tuple (plaquette) flip event.
-     *
-     * @return std::tuple<
-     *           double,                 // sum of bare star-energy differences over all affected stars
-     *           std::vector<int>,       // unique star centers (vertex indices), sorted ascending
-     *           std::vector<double>     // per-star bare energy differences on [t1,t2],
-     *                                   // in the same order as the vertex index vector
-     *         >
-     *
-     * @pre @p imag_time_2 > @p imag_time_1. The interval must be non-zero.
-     * @throws std::invalid_argument if @p imag_time_1 == @p imag_time_2.
-     *
-     * @note “Bare” means no coupling strength factors are applied.
-     * @note For each star, the local flip schedule consists of the tuple flip
-     *       at @p imag_time_tuple_flip and any single flips from @p plaquette_edges
-     *       that are incident on the star. Equal-time flips are handled by parity,
-     *       so their order does not affect the integral.
-     * @note The vertex list is deduplicated and sorted; the per-star values are
-     *       aligned with that list one-to-one.
+     * @brief Bare star-integral changes from one tuple event and per-edge single events.
+     * @param plaquette_index Index of the update tuple.
+     * @param spin_flip_lookup One single-event time per edge, aligned with get_plaquette_edges(plaquette_index).
+     * @param imag_time_tuple_flip Time of the update tuple's event.
+     * @return (sum, sorted unique star indices, aligned bare changes).
+     * @pre imag_time_1 < imag_time_2 and the per-edge array matches the tuple size.
+     * @throws std::invalid_argument If the bounds are equal.
+     * @see integrated_tuple_energy_diff_combination() for schedule parity and cutoff rules.
      */
     std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_star_energy_diff_combination(
@@ -812,44 +555,14 @@ public:
     );
 
     /**
-     * @brief Integrated PLAQUETTE–energy difference for a star–plus–single–flip combination update.
-     *
-     * For each plaquette touching any edge in @p star_edges, compute the (bare)
-     * change of the plaquette energy integrated over
-     * [@p imag_time_1, @p imag_time_2], when a tuple flip occurs at
-     * @p imag_time_tuple_flip and selected single-edge flips occur on
-     * @p star_edges at the times in @p spin_flip_lookup.
-     * Returns the per-plaquette contributions and their sum.
-     * Couplings are NOT applied here.
-     *
-     * @param star_index           Index of the star under consideration.
-     *                             The edge of this star determine which plaquettes are affected.
-     * @param imag_time_1          Lower bound of imaginary time (inclusive).
-     * @param imag_time_2          Upper bound of imaginary time (inclusive).
-     * @param spin_flip_lookup     Per-edge flip times aligned with @p star_edges:
-     *                             @c spin_flip_lookup[k] is the imaginary time of the
-     *                             single spin flip on @c star_edges[k]. Only those
-     *                             edges that belong to a given plaquette contribute to
-     *                             that plaquette’s local flip schedule.
-     * @param imag_time_tuple_flip Imaginary time of the tuple (star) flip event.
-     *
-     * @return std::tuple<
-     *           double,                 // sum of bare plaquette-energy differences over all affected plaquettes
-     *           std::vector<int>,       // unique plaquette indices, sorted ascending
-     *           std::vector<double>     // per-plaquette bare energy differences on [t1,t2],
-     *                                   // in the same order as the index vector
-     *         >
-     *
-     * @pre @p imag_time_2 > @p imag_time_1. The interval must be non-zero.
-     * @throws std::invalid_argument if @p imag_time_1 == @p imag_time_2.
-     *
-     * @note “Bare” means no coupling factors (e.g., @c -J) are applied.
-     * @note For each plaquette, the local flip schedule consists of the tuple flip
-     *       at @p imag_time_tuple_flip and any single flips from @p star_edges
-     *       that are incident on that plaquette. Equal-time flips are combined by
-     *       parity; order does not affect the integral.
-     * @note The plaquette list is deduplicated and sorted; per-plaquette values
-     *       align one-to-one with that list.
+     * @brief Bare plaquette-integral changes from one tuple event and per-edge single events.
+     * @param star_index Index of the update tuple.
+     * @param spin_flip_lookup One single-event time per edge, aligned with get_star_edges(star_index).
+     * @param imag_time_tuple_flip Time of the update tuple's event.
+     * @return (sum, sorted unique plaquette indices, aligned bare changes).
+     * @pre imag_time_1 < imag_time_2 and the per-edge array matches the tuple size.
+     * @throws std::invalid_argument If the bounds are equal.
+     * @see integrated_tuple_energy_diff_combination() for schedule parity and cutoff rules.
      */
     std::tuple<double, SmallIndexVector, SmallEnergyVector> 
     integrated_plaquette_energy_diff_combination(
@@ -861,35 +574,30 @@ public:
     );
 
     /**
-     * @brief Return the edge energy DIFFERENCE (integrated over imaginary time) at the edge edg when flipping the spin 
-     * between the imaginary times imag_time_1 and imag_time_2.
-     * 
-     * @param edg the edge of interest
-     * @param imag_time_1 the lower bound for imaginary time
-     * @param imag_time_2 the upper bound for imaginary time
-     * 
-     * @return the edge energy difference
-     * 
+     * @brief Return -2 times the bare edge integral for a spin reversal.
+     * @pre imag_time_1 < imag_time_2; split wrapped intervals at beta.
+     * @throws std::invalid_argument If the bounds are equal.
      */
     double integrated_edge_energy_diff(const Edge& edg, double imag_time_1, double imag_time_2);
-    // Optional known_flip_index is the lower-bound rank of known_flip_time.
-    // It is reused only when that event borders the event-free interval.
+    /**
+     * @brief Compute a bare edge-integral change on an interval with no inner events.
+     * @param known_flip_index Optional lower-bound rank of known_flip_time; -1 searches.
+     * @param known_flip_time Event bordering the interval whose rank is already known.
+     * @pre imag_time_1 < imag_time_2, with no event strictly inside the interval.
+     * @throws std::invalid_argument If the bounds are equal.
+     */
     inline double integrated_edge_energy_diff_no_inner_flips(
         const Edge& edg, double imag_time_1, double imag_time_2,
         int known_flip_index = -1, double known_flip_time = 0.
     );
 
     /**
-     * @brief Return the edge energy DIFFERENCE (integrated over imaginary time) at the edge edg when flipping the spins in spin_flip_lookup in the relevant time interval
-     * from imag_time_1 to imag_time_2.
-     * 
-     * @param edg the edge of interest
-     * @param imag_time_1 the lower bound for imaginary time
-     * @param imag_time_2 the upper bound for imaginary time
-     * @param spin_flip_lookup contains pairs with the imaginary time of the spin flip and the spin flip type (1: tuple, 0: single)
-     * 
-     * @return the edge energy difference
-     * 
+     * @brief Integrate the bare edge change from a sorted proposed flip schedule.
+     * @param spin_flip_lookup Sorted (time, type) pairs; only times are used here.
+     * @pre imag_time_1 < imag_time_2; the change has even parity before the first
+     *      schedule event in the interval. Events outside [imag_time_1, imag_time_2)
+     *      are ignored. Equal-time events cancel by parity.
+     * @throws std::invalid_argument If the bounds are equal.
      */
     inline double integrated_edge_energy_diff_combination(
         const Edge& edg, 
@@ -897,6 +605,10 @@ public:
         double imag_time_2, 
         std::vector<std::pair<double,int>>& spin_flip_lookup
     );
+    /**
+     * @brief Two-event overload; event times may be supplied in either order.
+     * @see integrated_edge_energy_diff_combination() for interval and parity rules.
+     */
     inline double integrated_edge_energy_diff_combination(
         const Edge& edg,
         double imag_time_1,
@@ -906,266 +618,191 @@ public:
     );
 
     /**
-     * @brief Return the edge energy (integrated over imaginary time) at the edge edg 
-     * between the imaginary times imag_time_1 and imag_time_2.
-     * 
-     * @param edg the edge of interest
-     * @param imag_time_1 the lower bound for imaginary time
-     * @param imag_time_2 the upper bound for imaginary time
-     * 
-     * @return the edge energy
-     * 
+     * @brief Integrate one spin without a Hamiltonian minus sign or coupling.
+     * @pre imag_time_1 < imag_time_2 within [0, beta]; split wrapped intervals.
+     * @throws std::invalid_argument If the bounds are equal.
      */
     inline double integrated_edge_energy(const Edge& edg, double imag_time_1, double imag_time_2);
 
-    // Integrated with weight w(tau)=min(tau, beta-tau) on [0, beta].
+    /**
+     * @brief Integrate an edge spin with weight min(tau, beta - tau).
+     * @pre Bounds lie in [0, beta]; reversed bounds request a wrap through beta.
+     * @throws std::invalid_argument If the bounds are equal.
+     */
     double integrated_edge_energy_weighted(const Edge& edg, double imag_time_1, double imag_time_2);
 
-    /**
-     * @brief Return the total edge energy (integrated over imaginary time) over all edges 
-     * between the imaginary times 0 and beta.
-     * 
-     * @return the total integrated edge energy
-     * 
-     */
+    /** @brief Recompute the sum of bare edge integrals over [0, beta]. */
     double total_integrated_edge_energy();
 
-    // Weighted version, w(tau)=min(tau, beta-tau) on [0, beta]
+    /** @brief Sum all edge integrals weighted by min(tau, beta - tau) over [0, beta]. */
     double total_integrated_edge_energy_weighted();
 
-    //TODO
+    /**
+     * @brief Rebuild bare edge caches and the basis's diagonal tuple caches.
+     * Stars are initialized in x and plaquettes in z. Call after direct history
+     * edits or before reusing caches whose coupling was previously zero.
+     */
     void init_potential_energy();
 
-    /**
-     * @brief Returns the sum of the spin on all links at imaginary time beta (or equivalently zero) WITHOUT an overall negative sign WITHOUT multiplying it by h/lmbda.
-     * 
-     * @return spin energy 
-     * 
-     */
+    /** @brief Sum spins at the time origin, without a minus sign or field coupling. */
     double get_diag_single_energy();
 
     /**
-     * @brief Returns the total magnetization in a format ready for the susceptibility calculation.
-     * 
-     * @return magnetization 
-     * 
+     * @brief Pack (integrated magnetization per edge, time-origin magnetization per edge).
+     * @note The integral is not divided by beta. Both components are real estimators.
      */
     std::complex<double> get_diag_M_M();
 
-    //TODO
+    /**
+     * @brief Pack (half the weighted magnetization integral per edge, magnetization per edge).
+     * Uses the weight min(tau, beta - tau) and the time-origin magnetization.
+     */
     std::complex<double> get_diag_dynamical_M_M();
 
-    /**
-     * @brief Returns the total magnetization in a format ready for the susceptibility calculation.
-     * 
-     * @return magnetization 
-     * 
-     */
+    /** @brief Pack the total single-spin event count into both real and imaginary components. */
     std::complex<double> get_non_diag_M_M();
 
     /**
-     * @brief Returns kL and kR in Eq. (9) of https://doi.org/10.1103/PhysRevX.5.031007.
-     * 
-     * @return kL and kR
-     * 
-     * @author Simon Mathias Linsel
+     * @brief Pack single-spin event counts in [0, beta/2) and [beta/2, beta).
+     * @return Real part kL and imaginary part kR for the off-diagonal dynamical estimator.
+     * @note The counts use the current time origin; this method does not rotate it.
      */
     std::complex<double> get_kL_kR_single();
 
-    /**
-     * @brief Returns the sum of all single spin flips in the imaginary time axis of the lattice divided by beta WITHOUT an overall negative sign. The result is the gauge field energy term multiplied by lmbda!
-     * 
-     * @return gauge field energy multiplied by lmbda 
-     * 
-     */
+    /** @brief Return the single-spin event count / beta; its negative estimates the lmbda energy term. */
     double get_non_diag_single_energy_x();
 
-    /**
-     * @brief Returns the sum of all single spin flips in the imaginary time axis of the lattice divided by beta WITHOUT an overall negative sign. The result is the electric field energy term multiplied by h!
-     * 
-     * @return electric field energy multiplied by h 
-     * 
-     */
+    /** @brief Return the single-spin event count / beta; its negative estimates the h energy term. */
     double get_non_diag_single_energy_z();
 
-    /**
-     * @brief Returns the sum of all plaquette flips in the imaginary time axis of the lattice divided by beta WITHOUT an overall negative sign. The result is the plaquette energy term multiplied by J!
-     * 
-     * @return plaquette energy multiplied by J 
-     * 
-     */
+    /** @brief Return the plaquette event count / beta; its negative estimates the J energy term. */
     double get_non_diag_tuple_energy_x();
 
-    /**
-     * @brief Returns the sum of all star flips in the imaginary time axis of the lattice divided by beta WITHOUT an overall negative sign. The result is the star energy term multiplied by mu!
-     * 
-     * @return star energy multiplied by mu 
-     * 
-     */
+    /** @brief Return the star event count / beta; its negative estimates the mu energy term. */
     double get_non_diag_tuple_energy_z();
 
-    /**
-     * @brief Returns the sum of all star terms at imaginary time beta (or equivalently zero) WITHOUT an overall negative sign WITHOUT multiplying it by mu.
-     * 
-     * @return star energy with a minus sign 
-     * 
-     */
+    /** @brief Sum star spin products at the time origin, without a minus sign or mu. */
     double get_diag_tuple_energy_x();
 
-    /**
-     * @brief Returns the sum of all plaquette terms at imaginary time beta (or equivalently zero) WITHOUT an overall negative sign WITHOUT multiplying it by J.
-     * 
-     * @return plaquette energy with a minus sign 
-     * 
-     */
+    /** @brief Sum plaquette spin products at the time origin, without a minus sign or J. */
     double get_diag_tuple_energy_z();
 
     /**
-     * @brief Returns the Fredenhagen-Marcu order parameter at equal imaginary time, see https://doi.org/10.1103/PhysRevLett.56.223.
-     * 
-     * @return complex number where the half Wilson/'t Hooft loop is the real part and the full Wilson/'t Hooft loop is the imaginary part
-     * 
+     * @brief Pack equal-time half and full Wilson/'t Hooft loop products.
+     * @return Real part: half-loop product; imaginary part: full-loop product.
+     *         The statistics layer forms the Fredenhagen-Marcu ratio from their means.
+     * @see https://doi.org/10.1103/PhysRevLett.56.223.
      */
     std::complex<double> fredenhagen_marcu();
 
     /**
-     * @brief Returns the staggered imaginary plaquette flip imaginary time differences order parameter similar to https://doi.org/10.1103/PhysRevB.85.195104.
-     * 
-     * @return staggered imaginary times order parameter 
-     * 
+     * @brief Return the alternating gap sum / beta for a uniformly chosen plaquette.
+     * @see https://doi.org/10.1103/PhysRevB.85.195104 for the related order parameter.
      */
     double get_staggered_imaginary_times_plaquette();
 
     /**
-     * @brief Returns the staggered imaginary star flip imaginary time differences order parameter similar to https://doi.org/10.1103/PhysRevB.85.195104.
-     * 
-     * @return staggered imaginary times order parameter 
-     * 
+     * @brief Return the alternating gap sum / beta for a uniformly chosen star.
+     * @see https://doi.org/10.1103/PhysRevB.85.195104 for the related order parameter.
      */
     double get_staggered_imaginary_times_star();
 
     /**
-     * @brief Searches for a winding percolating ("global") cluster of strings (i.e. spin = -1) in the lattice. Depends on the definition of coordinates in the lattice. 
-     * 
-     * @return bool which signals winding-percolation (1) or non-winding-percolation (0)
-     * 
+     * @brief Detect winding of a connected spin -1 edge cluster using lattice coordinates.
+     * @note Depends on geometry-specific coordinates and boundary conventions.
      */
     bool is_winding_percolating();
 
     /**
-     * @brief Searches for a percolating ("global") cluster of strings (i.e. spin = -1) in the lattice. Depends on the definition of coordinates in the lattice. 
-     * 
-     * @return bool which signals percolation (1) or non-percolation (0)
-     * 
+     * @brief Detect a spin -1 edge cluster spanning opposite coordinate boundaries.
+     * @note Depends on geometry-specific coordinates and boundary conventions.
      */
     bool is_percolating();
 
     /**
-     * @brief Searches for a winding plaquette percolating ("global") cluster of plaquettes (i.e. connected by  spin = -1) in the lattice. Depends on the definition of coordinates in the lattice. 
-     * 
-     * @return bool which signals plaquette winding-percolation (1) or plaquette non-winding-percolation (0)
-     * 
+     * @brief Detect winding of plaquettes connected through spin -1 edges.
+     * @note Depends on geometry-specific coordinates and boundary conventions.
      */
     bool is_winding_plaquette_percolating();
 
     /**
-     * @brief Searches for a plaquette percolating ("global") cluster of plaquettes (i.e. connected by spin = -1) in the lattice for open boundaries.
-     * 
-     * @return bool which signals plaquette percolation (1) or plaquette non-percolation (0)
-     * 
+     * @brief Detect a plaquette cluster spanning opposite boundaries through spin -1 edges.
+     * @note Depends on geometry-specific coordinates and boundary conventions.
      */
     bool is_plaquette_percolating();
 
     /**
-     * @brief TODO.
-     * 
-     * @return TODO.
-     * 
+     * @brief Detect winding of cubes connected through plaquettes with spin product +1.
+     * @pre Use a cubic lattice with periodic boundaries.
+     * @throws std::invalid_argument If lattice dimensionality is not three.
      */
     bool is_winding_cube_percolating();
 
-    /**
-     * @brief Returns the number of strings in the largest cluster of strings (i.e. spin = -1) in the lattice.
-     * 
-     * @return number of edges in the largest string-cluster.
-     * 
-     */
+    /** @brief Count spin -1 edges in the largest connected string cluster. */
     int largest_cluster();
 
-    /**
-     * @brief Returns the number of plaquettes in the largest plaquette cluster connected strings (i.e. spin = -1) in the lattice.
-     * 
-     * @return number of plaquettes in the largest plaquette-cluster.
-     * 
-     */
+    /** @brief Count plaquettes in the largest cluster connected through spin -1 edges. */
     int largest_plaquette_cluster();
 
     /**
-     * @brief Returns the percolation strength, i.e. the number of strings in the largest string-cluster divided by the total number of strings. If no cluster percolates it returns 0.
-     * 
-     * @return largest string cluster divided by number of strings if percolating, else 0.
-     * 
+     * @brief Return largest_cluster() / get_edge_count() if any string cluster percolates.
+     * @return Fraction of all edges in the largest string cluster, or zero without percolation.
+     * @note Periodic boundaries use winding; open boundaries use spanning.
      */
     double percolation_strength();
 
     /**
-     * @brief Returns the percolation probability, i.e. whether there is at least one percolating cluster. The term probability does only make sense when averaging over many samples.
-     * 
-     * @return 1 if we have percolating cluster, else 0.
-     * 
+     * @brief Return the string percolation indicator (zero or one) for this configuration.
+     * @note Uses winding for periodic boundaries and spanning for open boundaries.
+     *       A probability is obtained by averaging this indicator over samples.
      */
     double percolation_probability();
 
     /**
-     * @brief TODO.
-     * 
-     * @return TODO.
-     * 
+     * @brief Return largest_plaquette_cluster() / get_plaquette_count() if percolating.
+     * @return Fraction of all plaquettes in the largest cluster, or zero without percolation.
+     * @note Periodic boundaries use winding; open boundaries use spanning.
      */
     double plaquette_percolation_strength();
 
     /**
-     * @brief Returns the plaquette percolation probability, i.e. whether there is at least one percolating plaquette cluster. The term probability does only make sense when averaging over many samples.
-     * 
-     * @return 1 if we have percolating plaquette cluster, else 0.
-     * 
+     * @brief Return the plaquette percolation indicator (zero or one) for this configuration.
+     * @note Uses winding for periodic boundaries and spanning for open boundaries.
+     *       A probability is obtained by averaging this indicator over samples.
      */
     double plaquette_percolation_probability();
 
-    /**
-     * @brief TODO.
-     * 
-     * @return TODO.
-     * 
-     */
+    /** @brief Return -1; cube percolation strength is not implemented. */
     double cube_percolation_strength();
 
     /**
-     * @brief Returns the cube percolation probability, i.e. whether there is at least one percolating cube cluster. The term probability does only make sense when averaging over many samples.
-     * 
-     * @return 1 if we have percolating cube cluster, else 0.
-     * 
+     * @brief Return the cube winding indicator for periodic boundaries.
+     * @return One or zero for periodic cubic lattices; -1 for unsupported open boundaries.
+     * @throws std::invalid_argument For periodic lattices that are not three-dimensional.
      */
     double cube_percolation_probability();
 
     /**
-     * @brief Perform a global rotation of the imaginary time by a random tau_0 with 0 <= tau_0 <= beta.
-     * 
+     * @brief Shift all histories by one uniformly drawn time origin modulo beta.
+     * Adjusts time-origin spins by the parity of events crossing the cut and keeps
+     * histories sorted. Full-period bare integrals are invariant under this shift.
      */
     void rotate_imag_time();
 
     /**
-     * @brief Appends the current spin snapshot to the on-disk snapshot spool.
-     * 
+     * @brief Append time-origin spins to a temporary binary snapshot spool.
+     * @throws std::runtime_error If the temporary spool cannot be created or written.
+     * @see write_graph() to export the accumulated snapshots.
      */
     void update_spin_string();
 
     /**
-     * @brief Writes out a graphml XML file which contains the graph vertices (with occupation number and coordinates) and edges (with spins) 
-     * 
-     * @param file_name the filename of the XML file
-     * @param output_directory the directory where the method will write the graphml file to
-     * 
+     * @brief Write geometry and serialized spin histories as GraphML in file_name.xml.
+     * If snapshots have been spooled, export their per-edge spin strings and reset
+     * the spool after a successful write. Otherwise export the graph's legacy
+     * spin_string properties, which may be empty when no history has been recorded.
+     * @param file_name Filename stem, without the .xml extension.
+     * @param output_directory Existing writable destination directory.
      */
     void write_graph(const std::string& file_name, const std::filesystem::path& output_directory);
 
@@ -1178,27 +815,27 @@ private:
     std::string BOUNDARIES;
     int DEFAULT_SPIN;
 
-    // The object where all physical information is stored in
+    // Graph vertices carry stars; graph edges carry spin histories.
     LatticeGraph g;
-    // This vector stores all elementary plaquettes in the lattice
+    // Plaquette index -> boundary vertex pairs, in construction order.
     std::vector<std::vector<std::pair<int,int>>> plaquette_vector;
-    // This vector stores the imaginary times of all plaquette spin flips
+    // Plaquette index -> sorted tuple events (off-diagonal in x).
     std::vector<std::vector<double>> plaquette_flip_vector;
-    // This vector stores the integrated potential energies of the plaquette spin flips
+    // Plaquette index -> cached bare spin-product integral (diagonal in z).
     std::vector<double> integrated_plaquette_energy_vector;
-    //These vectors store the coordinates of the plaquettes
+    // Plaquette coordinates used by percolation.
     std::vector<double> plaquette_x_vector;
     std::vector<double> plaquette_y_vector;
     std::vector<double> plaquette_z_vector;
-    // This vector stores all elementary cubes in the lattice (3D)
+    // Cube index -> vertices (cubic geometry only).
     std::vector<std::vector<int>> cube_vector;
-    //These vectors store the coordinates of the cubes
+    // Cube coordinates used by percolation.
     std::vector<double> cube_x_vector;
     std::vector<double> cube_y_vector;
     std::vector<double> cube_z_vector;
-    // In this vector we store all the cubes of which this plaquette is part of 
+    // Plaquette index -> adjacent cubes.
     std::vector<std::vector<int>> plaquette_part_of_cube_lookup;
-    // In this vector we store all the plaquettes which are part of a given plaquette 
+    // Cube index -> boundary plaquettes.
     std::vector<std::vector<int>> cube_has_plaquettes_lookup;
 
     // p -> edges of plaquette p (arbitrary length: 3/4/6/…)
@@ -1209,9 +846,13 @@ private:
     std::vector<std::vector<Edge>> star_edges_cache_;
     // v -> unique plaquettes touching star v
     std::vector<std::vector<int>> star_plaquettes_cache_;
-    // Edge descriptors
+    // Edge descriptors in graph iteration order.
     std::vector<Edge> egde_cache_;
 
+    /**
+     * @brief Own the temporary snapshot file; destruction removes it.
+     * Copying creates an empty spool so lattice copies never share output streams.
+     */
     struct SnapshotSpoolState {
         std::filesystem::path path{};
         std::ofstream stream{};
@@ -1239,29 +880,25 @@ private:
     std::vector<double> MAX_COORDINATES;
     std::vector<double> MAX_PLAQUETTE_COORDINATES;
 
-    /**
-     * @brief Check the input validity before trying to create the LatticeGraph.
-     * 
-     * @details Will throw std::invalid_argument when input does not make sense.
-     * 
-     */
+    /** @brief Throw std::invalid_argument for invalid lattice specifications. */
     void check_input_validity() const;
+    /** @brief Build geometry lookups and edge descriptors after graph construction. */
     void build_caches_();
+    /** @brief Lazily create and open the temporary snapshot file. */
     void ensure_snapshot_spool_();
+    /** @brief Transpose snapshot rows into GraphML edge histories and release the spool. */
     void write_snapshot_graphml_from_spool_(const std::string& file_name, const std::filesystem::path& output_directory);
 
     /**
-     * @brief Constructs and returns LatticeGraph object which stores all physical information
-     * 
-     * @param basis the spin eigenbasis 
-     * @param lattice_type the lattice type, e.g. "triangular"
-     * @param L the system size of the lattice (in one dimension)
-     * @param beta inverse temperature
-     * @param boundaries the boundary condition of the lattice (periodic or open)
-     * @param default_spin the default spin on the links (1 or -1)
-     * 
-     * @return LatticeGraph boost graph adjacency list
-     * 
+     * @brief Build vertices, edges, plaquettes, cubes, coordinates, and loop paths.
+     * @param basis Spin eigenbasis.
+     * @param lattice_type Supported geometry name.
+     * @param L Positive linear system size.
+     * @param beta Imaginary-time period.
+     * @param boundaries "periodic" or "open".
+     * @param default_spin Initial spin on every edge: -1 or +1.
+     * @return Graph with the geometry's initial spin configuration.
+     * @note Populates the class's geometry tables as well as the returned graph.
      */
     LatticeGraph init_lattice_graph(
         char basis,
@@ -1271,6 +908,9 @@ private:
         const std::string& boundaries,
         int default_spin
         );
+    // Diagonal tuple products are unchanged by off-diagonal tuple events:
+    // stars and plaquettes overlap on an even number of edges. Only singles
+    // need to be merged when evaluating the basis's diagonal tuple integral.
     inline double integrated_tuple_energy_single_flips(
         std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
     );
@@ -1293,33 +933,28 @@ private:
     mutable std::uniform_int_distribution<int> plaquette_dist;
 
     /**
-     * @brief Helper function to construct 1) a half Wilson/'t Hooft loop and 2) a full Wilson/'t Hooft loop to calculate the Fredenhagen-Marcu order parameter.
-     * 
-     * @param start_y the upper bound of the full loop
-     * @param end_y the lower bound of the half/full loop
-     * @param middle_y the upper bound for the half loop
-     * @param start_x the lower bound for the half/full loop
-     * @param end_x the upper bound for the half/full loop
-     * @return Half loop and full loop vertex pairs
-     * 
+     * @brief Construct half and full Wilson (z) or dual 't Hooft (x) paths.
+     * @param start_y Upper bound of the full loop.
+     * @param end_y Lower bound of both loops.
+     * @param middle_y Upper bound of the half loop.
+     * @param start_x Lower x bound of both loops.
+     * @param end_x Upper x bound of both loops.
+     * @param basis Spin basis selecting Wilson or dual paths.
+     * @return (half-loop vertex pairs, full-loop vertex pairs).
+     * @note Paths and supported sizes depend on geometry. Kagome paths are not implemented.
      */
     std::pair<std::vector<VertexPair>, std::vector<VertexPair>> 
     construct_fredenhagen_marcu_loops(
         int start_y, int end_y, int middle_y, int start_x, int end_x, char basis
     );
-    // RNG can be copied (with automatic reseed)
+    // Lattice copies share this generator; copying the RNG object itself reseeds it.
     std::shared_ptr<RNG> rng;
     std::uniform_real_distribution<double> uniform_dist{0., 1.};
 
     /**
-     * @brief Return randomly selected element from iterable.
-     * 
-     * @tparam Iter the iterable from which elements are drawn
-     * @tparam RandomGenerator the random number generator
-     * @param start the lower index for the random element (included)
-     * @param end the upper index for the random element (not included)
-     * @param g the random number generator 
-     * @return Iter advanced to a random element
+     * @brief Choose a uniform iterator from a nonempty range [start, end).
+     * @param gen Generator used for the draw.
+     * @return Iterator advanced to the selected element.
      */
     template<typename Iter, typename RandomGenerator>
     Iter random_element(Iter start, Iter end, RandomGenerator& gen) {
@@ -1329,13 +964,9 @@ private:
     }
 
     /**
-     * @brief Return randomly selected element from iterable.
-     *
-     * @tparam Iter the iterable from which elements are drawn
-     * @param start the lower index for the random element (included)
-     * @param end the upper index for the random element (not included)
-     * @param g the random number generator
-     * @return Iter advanced to a random element
+     * @brief Choose an iterator using a lazily seeded generator local to this overload.
+     * @pre [start, end) is nonempty.
+     * @note This overload does not use the lattice's shared RNG.
      */
     template<typename Iter>
     Iter random_element(Iter start, Iter end) {
@@ -1344,6 +975,7 @@ private:
         return random_element(start, end, gen);
     }
 
+    /** @brief Wrap a into [0, b); b must be positive. */
     template<typename T>
     requires std::integral<T> || std::floating_point<T>
     constexpr T modulo(T a, T b) {
@@ -1616,7 +1248,7 @@ inline double Lattice::integrated_edge_energy(
     auto lo = detail::time_lower_bound(
         spin_flips.begin(), spin_flips.end(), imag_time_1);
 
-    // determine spin just after imag_time_1
+    // Parity of events strictly before the lower bound gives its incoming spin.
     int base_spin = get_spin(edg);
     int spin      = (((lo - spin_flips.begin()) & 1)
                      ? -base_spin
@@ -1625,7 +1257,7 @@ inline double Lattice::integrated_edge_energy(
     double energy = 0.0;
     double t_prev = imag_time_1;
 
-    // accumulate each flip interval
+    // Events at the lower bound toggle the spin before any positive-length segment.
     for (auto it = lo; it != spin_flips.end() && *it <= imag_time_2; ++it) {
         double t_curr = *it;
         energy += (t_curr - t_prev) * spin;
@@ -1633,7 +1265,7 @@ inline double Lattice::integrated_edge_energy(
         t_prev = t_curr;
     }
 
-    // tail interval until imag_time_2
+    // Integrate the final segment after the last event.
     if (t_prev < imag_time_2) {
         energy += (imag_time_2 - t_prev) * spin;
     }
@@ -1783,6 +1415,8 @@ inline double Lattice::integrated_tuple_energy_from_flips(
         return 0.0;
     }
 
+    // Merge histories backwards, combining equal-time flips by parity. This
+    // avoids allocating and sorting a combined list for every tuple integral.
     struct EdgeReverseStream {
         std::vector<double>::const_iterator begin;
         std::vector<double>::const_iterator it; // one past current event

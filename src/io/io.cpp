@@ -23,6 +23,7 @@ namespace paratoric {
 
 namespace {
 
+// Explicit r/i fields match the complex compound layout recognized by h5py.
 struct Hdf5Complex {
     double r;
     double i;
@@ -30,6 +31,8 @@ struct Hdf5Complex {
 
 using ObservableValue = std::variant<std::complex<double>, double>;
 
+// Use one storage type for real observables and paired estimators; real
+// samples receive a zero imaginary component.
 void write_observable_series(
     H5::Group& observable_group,
     const std::vector<ObservableValue>& values

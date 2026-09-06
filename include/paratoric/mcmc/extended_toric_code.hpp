@@ -15,6 +15,13 @@
 
 namespace paratoric {
 
+/**
+ * @brief Public C++ entry points with runtime selection of the spin basis.
+ *
+ * Each call creates a fresh QMC backend. State persists between parameter
+ * points only within a single get_hysteresis() call. Configuration and result
+ * field contracts are defined in types.hpp.
+ */
 class ExtendedToricCode {
 public:
     ExtendedToricCode();
@@ -27,8 +34,8 @@ public:
     ExtendedToricCode& operator=(const ExtendedToricCode&) = delete;
 
     /**
-     * @brief This method will run a QMC thermalization of the extended toric code with the specified parameters and return observables and acceptance ratio diagnostics.
-     * 
+     * @brief Measure observables after every thermalization proposal.
+     *
      * @param config the configuration object
      * @param config.sim_spec.N_thermalization the number of thermalization steps
      * @param config.sim_spec.N_resamples the number of bootstrap resamples
@@ -67,8 +74,8 @@ public:
     static Result get_thermalization(const Config& config);
 
     /**
-     * @brief This method will run a QMC simulation of the extended toric code with the specified parameters and return observables.
-     * 
+     * @brief Thermalize a fresh lattice, then collect samples and bootstrap statistics.
+     *
      * @param config the configuration object
      * @param config.sim_spec.N_samples the number of snapshots
      * @param config.sim_spec.N_thermalization the number of thermalization steps
@@ -118,8 +125,8 @@ public:
     static Result get_sample(const Config& config);
 
     /**
-     * @brief This method will run a QMC hysteresis simulation of the extended toric code with the specified parameters and return observables.
-     * 
+     * @brief Follow the paired field schedules while retaining the lattice state.
+     *
      * @param config the configuration object
      * @param config.sim_spec.N_samples the number of snapshots
      * @param config.sim_spec.N_thermalization the number of thermalization steps

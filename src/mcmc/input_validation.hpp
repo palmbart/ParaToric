@@ -9,6 +9,11 @@
 
 namespace paratoric::detail {
 
+// Shared entry-point checks throw std::invalid_argument. Geometry-specific
+// restrictions are enforced during lattice construction; the QMC backend
+// checks its basis, coupling signs, and requested observable names.
+
+/** @brief Validate supported geometry labels, positive extent, basis, and initial spin. */
 inline void validate_lattice_spec(const LatSpec& spec) {
     if (spec.basis != 'x' && spec.basis != 'z') {
         throw std::invalid_argument("basis must be 'x' or 'z'");
@@ -34,6 +39,7 @@ inline void validate_lattice_spec(const LatSpec& spec) {
     }
 }
 
+/** @brief Validate non-negative thermalization and a positive bootstrap count. */
 inline void validate_common_sim_spec(const SimSpec& spec) {
     if (spec.N_thermalization < 0) {
         throw std::invalid_argument("N_thermalization must be a non-negative integer");
@@ -43,6 +49,7 @@ inline void validate_common_sim_spec(const SimSpec& spec) {
     }
 }
 
+/** @brief Also require positive sample count and non-negative proposal spacing. */
 inline void validate_sampling_sim_spec(const SimSpec& spec) {
     validate_common_sim_spec(spec);
     if (spec.N_samples <= 0) {
@@ -53,16 +60,19 @@ inline void validate_sampling_sim_spec(const SimSpec& spec) {
     }
 }
 
+/** @brief Validate a thermalization run; sampling counts are ignored. */
 inline void validate_thermalization_config(const Config& config) {
     validate_lattice_spec(config.lat_spec);
     validate_common_sim_spec(config.sim_spec);
 }
 
+/** @brief Validate common lattice and sampling constraints. */
 inline void validate_sample_config(const Config& config) {
     validate_lattice_spec(config.lat_spec);
     validate_sampling_sim_spec(config.sim_spec);
 }
 
+/** @brief Also require paired schedules and, when saving snapshots, one path per point. */
 inline void validate_hysteresis_config(const Config& config) {
     validate_sample_config(config);
 

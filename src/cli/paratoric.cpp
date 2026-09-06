@@ -21,6 +21,8 @@
 
 namespace po = boost::program_options;
 
+// Parse one workflow, validate it before creating output directories, then
+// delegate simulation and HDF5 serialization to IO. Exceptions exit with code 2.
 int main(int argc, char **argv) {
     try {
         paratoric::Config config{};
@@ -94,6 +96,7 @@ int main(int argc, char **argv) {
                     "folder_names must match the hysteresis schedule length"
                 );
             }
+            // IO resolves these folder names into paths; only the count is needed here.
             auto config_to_validate = config;
             config_to_validate.out_spec.paths_out.resize(
                 config.out_spec.folder_names.size()

@@ -1175,7 +1175,7 @@ Lattice::LatticeGraph Lattice::init_lattice_graph(
                 integrated_plaquette_energy_vector.emplace_back(0.);
                 plaquette_x_vector.emplace_back(0.);
                 plaquette_y_vector.emplace_back(0.);
-                // TODO Add plaquette coordinates;
+                // TODO: Supply kagome plaquette coordinates for percolation observables.
             } else if ((v) % 3 == 1) {
                 int x_old = (v) / 3 % L;
                 int y_old = (v) / 3 / L;
@@ -1733,7 +1733,7 @@ Lattice::construct_fredenhagen_marcu_loops(
             }
 
         } else if (LATTICE_TYPE == "kagome") {
-            // TODO implement this
+            // TODO: Construct Wilson paths for kagome geometry.
 #ifndef NDEBUG
             throw std::invalid_argument("Kagome lattice is not supported for Wilson loops.");
 #endif
@@ -1954,7 +1954,7 @@ Lattice::construct_fredenhagen_marcu_loops(
                 prev_plaquette = next_plaquette;
             }
         } else if (LATTICE_TYPE == "kagome") {
-            // TODO implement this
+            // TODO: Construct dual 't Hooft paths for kagome geometry.
 #ifndef NDEBUG
             throw std::invalid_argument("Kagome lattice is not supported for 't Hooft loops.");
 #endif
@@ -1965,7 +1965,7 @@ Lattice::construct_fredenhagen_marcu_loops(
     return std::make_pair(half_loop, full_loop);  
 }
 
-// TODO
+// Resolve geometry once so proposals can use cached adjacency and descriptors.
 void Lattice::build_caches_() {
     egde_cache_.clear();
     for (auto e : boost::make_iterator_range(boost::edges(g))) {
@@ -1973,7 +1973,7 @@ void Lattice::build_caches_() {
         egde_cache_.emplace_back(e);
     }
 
-    // ----- 1) Plaquette -> edges (arbitrary length) -----
+    // Plaquette -> edges in construction order and sorted unique vertices.
     plaquette_edges_cache_.clear();
     plaquette_edges_cache_.resize(plaquette_vector.size());
     plaquette_vertices_cache_.clear();
@@ -1991,11 +1991,11 @@ void Lattice::build_caches_() {
         for (const auto& pr : vpairs) {
             auto uv = boost::edge(pr.first, pr.second, g);
             if (!uv.second) {
-                // try opposite orientation for directed graphs
+                // Retry the vertex pair in reverse order.
                 uv = boost::edge(pr.second, pr.first, g);
             }
             if (!uv.second) {
-                // hard fail in debug; avoid silent UB on invalid descriptor
+                // Reject missing geometry before caching an invalid descriptor.
                 throw std::runtime_error("build_caches_: missing edge between plaquette vertices");
             }
             pedges.emplace_back(uv.first);
@@ -2008,7 +2008,7 @@ void Lattice::build_caches_() {
         pverts.erase(std::unique(pverts.begin(), pverts.end()), pverts.end());
     }
 
-    // ----- 2) Star (vertex) -> incident edges (use vertex_index map!) -----
+    // Star center -> incident edges in graph iteration order.
     auto vindex = boost::get(boost::vertex_index, g);
     const auto V = static_cast<size_t>(boost::num_vertices(g));
 
@@ -2026,7 +2026,7 @@ void Lattice::build_caches_() {
         }
     }
 
-    // ----- 3) Star (vertex) -> unique touching plaquettes -----
+    // Star center -> sorted unique adjacent plaquette indices.
     star_plaquettes_cache_.clear();
     star_plaquettes_cache_.resize(V);
     for (size_t v = 0; v < V; ++v) {
@@ -2453,7 +2453,7 @@ void Lattice::insert_double_tuple_flip(
     std::span<const Edge> tuple_edges, 
     double tau_left, 
     double tau_right) {
-    // Is this really necessary? Should check...
+    // Ordered times are required even when inserting into an empty history.
     if (tau_right < tau_left) [[unlikely]] {
         throw std::invalid_argument("insert_double_tuple_flip: tau_right has to be larger than tau_left.");
     }
@@ -2837,15 +2837,15 @@ double Lattice::total_integrated_plaquette_energy() {
 }
 
 namespace {
-    // Insert (t, tag) into sorted-by-time vector with linear insertion (m tiny)
+    // Insert (time, tag) into a short sorted local schedule.
     inline void insert_sorted_by_time(std::vector<std::pair<double,int>>& v,
                                       double t, int tag) {
         auto it = v.begin();
-        // Keep ascending order; stable wrt equal times
+        // Preserve insertion order for equal times.
         for (; it != v.end() && it->first <= t; ++it) {}
         v.insert(it, {t, tag});
     }
-} // anonymous namespace
+} // namespace
 
 [[gnu::hot]]
 std::tuple<double, Lattice::SmallIndexVector, Lattice::SmallEnergyVector> 
@@ -3030,7 +3030,7 @@ std::complex<double> Lattice::get_non_diag_M_M() {
     for (const auto& edg : egde_cache_) {
         k_total += g[edg].single_spin_flips.size();
     }
-    // Return raw count in .real(); imag unused (set =0 or copy for compatibility)
+    // Both components carry the raw count; the off-diagonal reducer uses real().
     return {k_total, k_total};
 }
 
@@ -3048,7 +3048,6 @@ std::complex<double> Lattice::get_non_diag_M_M() {
     return W_tri_full(b, beta) - W_tri_full(a, beta);
 }
 
-// ===== Dynamical / fidelity susceptibility kernel =====
 // Integrate sigma_e(tau) * w(tau) over [imag_time_1, imag_time_2]
 // using w(tau)=min(tau, beta-tau) on [0, beta].
 double Lattice::integrated_edge_energy_weighted(
@@ -3066,11 +3065,11 @@ double Lattice::integrated_edge_energy_weighted(
     }
 
     const auto& spin_flips = g[edg].spin_flips;  // sorted in [0, BETA)
-    // find flips in [imag_time_1, imag_time_2)
+    // Include boundary events; their zero-length endpoint segments add no weight.
     auto lo = detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
     auto hi = detail::time_upper_bound(lo,               spin_flips.end(),  imag_time_2);
 
-    // spin just after imag_time_1 (same parity logic as your unweighted version)
+    // Start with the spin just before any event at the lower bound.
     const int base_spin = get_spin(edg); // value just after tau=0
     int spin = (((lo - spin_flips.begin()) & 1) ? -base_spin : base_spin);
 
@@ -3095,16 +3094,14 @@ double Lattice::integrated_edge_energy_weighted(
 }
 
 std::complex<double> Lattice::get_kL_kR_single() {
-    // REQUIREMENT: call rotate_imag_time() just before measuring,
-    // so the cut at tau=0, beta/2 is uniformly random each time.
+    // Counts refer to the current cut at zero and beta/2. The caller controls
+    // when the time origin is randomized with rotate_imag_time().
     double kL = 0.0, kR = 0.0;
     const double half = 0.5 * BETA;
 
     for (const auto& edg : egde_cache_) {
         const auto& flips = g[edg].single_spin_flips; // sorted, in [0, beta)
-        // Count into halves without branches in the inner loop
-        // (linear scan is faster than two binary searches per edge here
-        //  because we must visit all elements anyway).
+        // Split the single-spin event count at the midpoint of the period.
         for (double t : flips) {
             if (t < half) ++kL; else ++kR;
         }
@@ -3118,7 +3115,6 @@ double Lattice::get_non_diag_single_energy_x() {
     for (const auto& edg : egde_cache_) {
         energy_beta_lmbda += g[edg].single_spin_flips.size(); 
     }
-    // energy_beta_lmbda is the gauge field energy multiplied by lmbda and beta. The returned value is the gauge field energy multiplied by lmbda
     return energy_beta_lmbda / BETA;
 }
 
@@ -3127,7 +3123,6 @@ double Lattice::get_non_diag_single_energy_z() {
     for (const auto& edg : egde_cache_) {
         energy_beta_h += g[edg].single_spin_flips.size();
     }
-    // energy_beta_h is the electric field energy multiplied by h and beta. The returned value is the electric field energy multiplied by h
     return energy_beta_h / BETA;
 }
 
@@ -3136,7 +3131,6 @@ double Lattice::get_non_diag_tuple_energy_x() {
     for (size_t plaquette_index = 0; plaquette_index < plaquette_vector.size(); ++plaquette_index) {
         energy_beta_J += plaquette_flip_vector[plaquette_index].size();
     }
-    // energy_beta_J is the plaquette energy term multiplied by J and beta. The returned value is the plaquette energy multiplied by J
     return energy_beta_J / BETA;
 }
 
@@ -3145,7 +3139,6 @@ double Lattice::get_non_diag_tuple_energy_z() {
     for (size_t star_center = 0; star_center < (size_t)get_vertex_count(); ++star_center) {
         energy_beta_mu += g[star_center].star_flips.size();
     }
-    // energy_beta_mu is the star energy term multiplied by mu and beta. The returned value is the star energy multiplied by mu
     return energy_beta_mu / BETA;
 }
 
@@ -3457,7 +3450,7 @@ bool Lattice::is_winding_cube_percolating() {
                 
                 // Iterate over all plaquettes adjacent to cube 'cur'.
                 for (int p_index : cube_has_plaquettes_lookup[cur]) {
-                    // Only traverse plaquettes with active status.
+                    // A shared face connects cubes when its spin product is +1.
                     const auto& pedges = get_plaquette_edges(p_index);
                     if (get_tuple_prod(pedges) == 1) {
                         // For each neighboring cube via this plaquette.
@@ -3835,7 +3828,7 @@ double Lattice::cube_percolation_probability() {
     if (BOUNDARIES == "periodic") {
         return is_winding_cube_percolating();
     } else {
-        //TODO
+        // Cube percolation with open boundaries is not implemented.
         return -1.;
     }
 }

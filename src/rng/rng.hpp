@@ -8,7 +8,13 @@
 
 namespace paratoric::rng {
 
-// This RNG is an extension of std::mt19337_64 with additional features like manually setting seeds and a copy-costructor which sets a new random seed
+/**
+ * @brief Uniform random bit generator wrapping std::mt19937_64.
+ *
+ * Default construction and copying reseed from std::random_device. Use set_seed()
+ * for reproducible draws. Sharing an RNG via shared_ptr preserves one common
+ * stream; it does not invoke the reseeding copy constructor.
+ */
 struct RNG {
     using result_type = std::mt19937_64::result_type;
 
@@ -26,7 +32,7 @@ struct RNG {
     static constexpr result_type min() { return std::mt19937_64::min(); }
     static constexpr result_type max() { return std::mt19937_64::max(); }
 
-    // copy = reseed
+    // Copying starts a fresh stream rather than duplicating the source state.
     RNG(RNG const&) : RNG() {}
     RNG& operator=(RNG const&) {
         seed_ = std::random_device{}();
@@ -34,12 +40,19 @@ struct RNG {
         return *this;
     }
 
+    /** @brief Restart the stream at seed s. */
     void set_seed(std::uint64_t s) {
         seed_ = s; rng.seed(seed_);
     }
     std::uint64_t get_seed() const { return seed_; }
 };
 
+/**
+ * @brief Draw an unbiased integer in [0, bound).
+ * @return Zero without consuming RNG state when bound is zero.
+ * @note Multiply-and-reject uses 128-bit arithmetic where available; other
+ *       platforms use std::uniform_int_distribution.
+ */
 inline std::uint64_t uniform_index(RNG& rng, std::uint64_t bound) {
     if (bound == 0) {
         return 0;

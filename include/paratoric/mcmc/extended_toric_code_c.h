@@ -1,6 +1,16 @@
 // ParaToric - Continuous-time QMC for the extended toric code in the x/z-basis
 // Copyright (C) 2022-2026  Simon Mathias Linsel, Lode Pollet
 
+/**
+ * @file
+ * @brief C interface to ParaToric, with caller-owned inputs and library-allocated results.
+ *
+ * Input strings and arrays are borrowed for the duration of a call. Every array
+ * with nonzero length needs a non-null pointer; strings must be NUL-terminated.
+ * The caller keeps the input configuration alive until the synchronous call returns.
+ * Result storage is released with ptc_result_destroy(); handles with ptc_destroy().
+ * Entry points translate C++ exceptions into ptc_status_t values.
+ */
 #pragma once
 
 #include <stdbool.h>

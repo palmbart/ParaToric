@@ -11,6 +11,8 @@
 #include <vector>
 #include <string>
 
+// Hand-built configurations exercise geometry, event histories, bare integrals,
+// and percolation. Direct spin/history edits intentionally bypass QMC caches.
 namespace paratoric {
 
 BOOST_AUTO_TEST_CASE(get_non_string_count_test_1) {

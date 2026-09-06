@@ -1,9 +1,5 @@
-# /python/bindings/CMakeLists.txt
-
-# Assumes:
-# - Top-level already did: add_subdirectory(external/pybind11)
-# - Target paratoric_core exists
-# - C++ standard is set globally (C++23 in your top-level)
+# The top-level build provides pybind11 and paratoric::core. Linking core
+# supplies the C++23 requirement; extension output goes into the Python package.
 
 find_package(Python3 COMPONENTS Development.Module NumPy REQUIRED)
 
@@ -57,7 +53,7 @@ else()
   )
 endif()
 
-# 1) Optional: copy into current Python's site-packages
+# Optionally install into the selected interpreter's site-packages.
 if (PARATORIC_INSTALL_TO_SITE)
   message(STATUS "On install, will copy '${BINDINGS_MODULE_NAME}' to: ${_PY_SITELIB}/paratoric")
 
@@ -72,7 +68,7 @@ if (PARATORIC_INSTALL_TO_SITE)
       DESTINATION "${_PY_SITELIB}/paratoric")
 endif()
 
-# 2) Optional: run pip editable install (package metadata/entry-points)
+# Optionally install Python package metadata in editable mode; CMake builds the extension.
 if (PARATORIC_PIP_EDITABLE_INSTALL)
   if (PARATORIC_PIP_OFFLINE_INSTALL)
     install(CODE

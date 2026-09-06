@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.19.3)
 
 find_package(Boost COMPONENTS unit_test_framework REQUIRED NO_MODULE)
 
+# Each source defines its own Boost.Test module and becomes a separate CTest entry.
 set(test_sources
     lattice/test_lattice.cpp
     mcmc/test_extended_toric_code_qmc.cpp

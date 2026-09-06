@@ -16,6 +16,7 @@
 
 namespace paratoric {
 
+// Runtime basis selection stays here; lattice state lives only for each call.
 struct ExtendedToricCode::Impl {
     template<char B, typename Fn>
     static auto with_backend(Fn&& fn) {

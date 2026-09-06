@@ -15,7 +15,7 @@
 
 namespace paratoric::statistics {
 
-// next power of two
+/** @brief Smallest representable power of two >= n; returns one for n == 0. */
 inline std::size_t next_pow2(std::size_t n) {
     if (n == 0) return 1;
     --n;
@@ -27,7 +27,11 @@ inline std::size_t next_pow2(std::size_t n) {
     return n + 1;
 }
 
-// In-place radix-2 FFT. Could use faster external libraries like MKL but not worth the trouble for this
+/**
+ * @brief In-place radix-2 transform; inverse applies the 1/N normalization.
+ * @pre The array is empty or its size is a power of two.
+ * @throws std::runtime_error In debug builds, if the size is not a power of two.
+ */
 inline void fft_inplace(std::vector<std::complex<double>>& a, bool inverse) {
     const std::size_t n = a.size();
     if (n == 0) return;
@@ -70,7 +74,7 @@ inline void fft_inplace(std::vector<std::complex<double>>& a, bool inverse) {
     }
 }
 
-// unbiased FFT-based version O(N log N))
+/** @brief FFT implementation of get_autocorrelation_function(), O(N log N). */
 inline std::vector<double> get_autocorrelation_function_fft(std::span<const double> data) {
     const std::size_t N = data.size();
     if (N == 0) return {0.0};
@@ -101,7 +105,7 @@ inline std::vector<double> get_autocorrelation_function_fft(std::span<const doub
 
     // a[k].real() now holds sum_{i=0}^{N-1-k} y[i]*y[i+k] for k < N (thanks to zero padding)
 
-    const double C0 = c0_sum / static_cast<double>(N); // unbiased denominator for normalization
+    const double C0 = c0_sum / static_cast<double>(N); // variance normalization at lag zero
     std::vector<double> acf;
     acf.reserve(N);
 
@@ -118,7 +122,7 @@ inline std::vector<double> get_autocorrelation_function_fft(std::span<const doub
     return acf;
 }
 
-// Naive version O(n^2) 
+/** @brief Direct implementation of get_autocorrelation_function(), O(N squared). */
 inline std::vector<double> get_autocorrelation_function_naive(std::span<const double> data) {
     const size_t N = data.size();
     if (N == 0) return {0.0};
@@ -155,11 +159,12 @@ inline std::vector<double> get_autocorrelation_function_naive(std::span<const do
 }
 
 /**
- * @brief This function returns the autocorrelation function of the input data.
- * 
- * @param data the data of which the autocorrelation function will be calculated
- * 
- * @return the autocorrelation function
+ * @brief Compute normalized autocorrelation for each available sample lag.
+ * @param data Real-valued series in time order.
+ * @param mode "fft" (default) or "naive"; both use the same normalization.
+ * @return rho(k) = C(k) / C(0), using N-k pairs for C(k) and N for C(0).
+ *         Empty input returns {0}; constant input returns {1}.
+ * @throws std::invalid_argument If mode is unknown.
  */
 inline std::vector<double> get_autocorrelation_function(std::span<const double> data, std::string mode = "fft") { 
     if (mode == "fft") {
@@ -175,11 +180,14 @@ inline std::vector<double> get_autocorrelation_function(std::span<const double> 
 }
 
 /**
- * @brief This function returns the integrated autocorrelation time of the input autocorrelation function acf.
- * 
- * @param acf the autocorrelation function which will be integrated
- * 
- * @return the integrated autocorrelation time
+ * @brief Estimate integrated autocorrelation time in sample-spacing units.
+ * @param acf Normalized autocorrelation values starting at lag zero.
+ * @return 0.5 + the retained positive-window sum, clamped to at least 0.5.
+ *         Empty, zero-normalization, or nonfinite estimates return 0.5.
+ *
+ * The window uses the first non-positive pair rho(2m) + rho(2m+1), m >= 1,
+ * and includes through lag 2m. If no such pair exists, it ends before the
+ * first non-positive individual lag, or uses all lags if they stay positive.
  */
 inline double get_autocorrelation_time(const std::vector<double>& acf) {
     const size_t N = acf.size();
@@ -190,7 +198,7 @@ inline double get_autocorrelation_time(const std::vector<double>& acf) {
     for (size_t m = 1; 2*m + 1 < N; ++m) {
         const double pair_sum = acf[2*m] + acf[2*m + 1];
         if (pair_sum <= 0.0) {
-            W = 2*m;               // include up to 2m-1
+            W = 2*m;               // The summation below includes lag 2m.
             break;
         }
     }
@@ -213,6 +221,3 @@ inline double get_autocorrelation_time(const std::vector<double>& acf) {
 
 
 } // namespace paratoric::statistics
-
-
-

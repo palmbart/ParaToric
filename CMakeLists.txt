@@ -4,7 +4,7 @@ project(paratoric
   LANGUAGES CXX C
 )
 
-set(PARATORIC_PRE_RELEASE "")  # or empty
+set(PARATORIC_PRE_RELEASE "")  # Optional version suffix, e.g. rc1.
 
 # Compose full version
 set(PARATORIC_VERSION_FULL "${PROJECT_VERSION}")
@@ -72,7 +72,7 @@ set(HDR_PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include/paratoric/types/types.hpp
 )
 
-# Private headers stay out of install (IDE-visible if you like)
+# Private implementation headers are visible to IDEs but are not installed.
 set(HDR_PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/lattice/lattice.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/mcmc/input_validation.hpp
@@ -147,7 +147,7 @@ if(PARATORIC_BUILD_CLI)
   set_target_properties(paratoric PROPERTIES OUTPUT_NAME paratoric)
   install(TARGETS paratoric RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   
-  # sometimes useful, symbolic links/copies don't work on macOS due to permission issues
+  # The Python CLI locates the executable in the checkout's bin directory.
   if(PROJECT_IS_TOP_LEVEL)
     install(TARGETS paratoric RUNTIME DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/bin/)
   endif()

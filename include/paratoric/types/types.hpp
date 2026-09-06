@@ -26,12 +26,12 @@ namespace paratoric {
  * 
  */
 struct LatSpec {
-    char        basis        = 'x';
+    char        basis        = 'x';        ///< Spin eigenbasis: 'x' or 'z'.
     std::string lattice_type = "square";
-    int         system_size  = 16;
-    double      beta         = 16.;
-    std::string boundaries   = "periodic";
-    int         default_spin = +1;
+    int         system_size  = 16;         ///< Positive linear size in lattice units.
+    double      beta         = 16.;        ///< Positive inverse temperature; imaginary-time period.
+    std::string boundaries   = "periodic";  ///< "periodic" or "open".
+    int         default_spin = +1;         ///< Initial spin on every edge: -1 or +1.
 };
 
 /**
@@ -48,11 +48,11 @@ struct LatSpec {
  * 
  */
 struct ParamSpec {
-    double mu     = 1.0;
-    double h      = 0.0;
-    double J      = 1.0;
-    double lmbda  = 0.0;
-    // optional “thermalization schedule” values when they differ
+    double mu     = 1.0;  ///< Star coupling.
+    double h      = 0.0;  ///< Electric-field coupling.
+    double J      = 1.0;  ///< Plaquette coupling.
+    double lmbda  = 0.0;  ///< Gauge-field coupling.
+    // Supply both values when SimSpec::custom_therm is enabled; NaN means unset.
     double h_therm     = std::numeric_limits<double>::quiet_NaN();
     double lmbda_therm = std::numeric_limits<double>::quiet_NaN();
     std::vector<double> h_hys{};
@@ -72,12 +72,12 @@ struct ParamSpec {
  * 
  */
 struct SimSpec {
-    int    N_samples                = 1000;     // 0 for thermalization-only
-    int    N_thermalization         = 10000;
-    int    N_between_samples        = 1000;
-    int    N_resamples              = 1000;
-    bool   custom_therm             = false; // used only by sampling
-    int    seed                     = 0;     // 0 means random seed
+    int    N_samples                = 1000;  ///< Positive for sampling; ignored by thermalization-only runs.
+    int    N_thermalization         = 10000; ///< Non-negative number of initial update proposals.
+    int    N_between_samples        = 1000;  ///< Non-negative proposals before each recorded sample.
+    int    N_resamples              = 1000;  ///< Positive bootstrap resample count.
+    bool   custom_therm             = false; ///< Sampling only: thermalize at custom fields, then ramp.
+    int    seed                     = 0;     ///< Nonzero reseeds the RNG; zero leaves its current state.
     std::vector<std::string> observables{};
 };
 
@@ -93,10 +93,10 @@ struct SimSpec {
  * 
  */
 struct OutSpec {
-    std::filesystem::path path_out; // single path
-    std::vector<std::filesystem::path> paths_out{}; // hysteresis
-    std::string folder_name; // single folder
-    std::vector<std::string> folder_names{}; // hysteresis
+    std::filesystem::path path_out;                  ///< Single-run output directory.
+    std::vector<std::filesystem::path> paths_out{};   ///< One directory per hysteresis point.
+    std::string folder_name;                        ///< Single-run output subdirectory.
+    std::vector<std::string> folder_names{};         ///< Output subdirectories for hysteresis points.
     bool save_snapshots = false;
     bool full_time_series = 0;
 };
@@ -152,7 +152,9 @@ struct Config{
  */
 struct Result {
     std::vector<std::vector<std::variant<std::complex<double>, double>>> series{};
+    /// Thermalization only: raw Metropolis ratios (possibly > 1), or zero for abandoned proposals.
     std::vector<double> acc_ratio{};
+    /// Bootstrap means/errors, Binder ratios/errors, and autocorrelation times in sample units.
     std::vector<double> mean{}, mean_std{}, binder{}, binder_std{}, tau_int{};
     std::vector<std::vector<std::vector<std::variant<std::complex<double>, double>>>> series_hys{};
     std::vector<std::vector<double>> mean_hys{}, mean_std_hys{}, binder_hys{}, binder_std_hys{}, tau_int_hys{};

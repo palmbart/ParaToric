@@ -24,6 +24,9 @@ using paratoric::ExtendedToricCode;
 
 namespace {
 
+// Array conversion copies into NumPy-owned storage while holding the GIL.
+// The GIL is released only around the C++ simulation, before these helpers run.
+
 inline std::complex<double>
 to_complex(const std::variant<std::complex<double>, double>& v)
 {
@@ -43,7 +46,7 @@ py::array to_numpy_2d_complex(
             throw std::runtime_error("observable series are not of equal length");
 
     py::array_t<std::complex<double>> a({n_obs, n_samples});
-    auto buf = a.mutable_unchecked<2>();  // typed array -> OK in pybind11 v3
+    auto buf = a.mutable_unchecked<2>();
     for (ssize_t i = 0; i < n_obs; ++i)
         for (ssize_t j = 0; j < n_samples; ++j)
             buf(i, j) = to_complex(vv[i][static_cast<size_t>(j)]);
@@ -110,11 +113,9 @@ PYBIND11_MODULE(_paratoric, m) {
     m.doc() = R"pbdoc(
 ParaToric bindings that return NumPy arrays.
 
-Functions
----------
-get_thermalization
-get_sample
-get_hysteresis
+The extended_toric_code submodule exposes get_thermalization, get_sample,
+and get_hysteresis. Invalid configurations raise ValueError; simulation
+consistency and snapshot I/O failures raise RuntimeError.
 )pbdoc";
 
     auto etc = m.def_submodule(
@@ -202,18 +203,18 @@ get_hysteresis
         py::arg("save_snapshots") = false,
         py::arg("path_out") = py::none(),
         py::doc(R"pbdoc(
-Run a QMC thermalization of the extended toric code and return observables and acceptance ratio diagnostics.
+Measure observables and raw acceptance ratios after each thermalization proposal.
 
 Parameters
 ----------
 N_thermalization : int
-    Number of thermalization steps.
+    Non-negative number of proposed updates; rejected proposals also count.
 N_resamples : int, optional
-    Number of bootstrap resamples.
+    Positive number of bootstrap resamples; use at least two for error estimates.
 observables : list[str]
-    Observable names computed at every snapshot.
+    Observable names in the order used by all returned arrays.
 seed : int, optional
-    PRNG seed. 0 will lead to random seed.
+    Nonzero seeds reproduce a run; zero uses a fresh random seed.
 mu : float
     Hamiltonian parameter (star term).
 h : float
@@ -223,31 +224,36 @@ J : float
 lmbda : float
     Hamiltonian parameter (gauge field term).
 basis : {'x','z'}, optional
-    Basis for the templated backend; selects the implementation at runtime.
+    Spin eigenbasis; selects the C++ backend.
 lattice_type : str
-    Lattice type (e.g. "triangular").
+    Geometry: "square", "cubic", "honeycomb", "triangular", or "kagome".
 system_size : int
-    Linear system size of the lattice.
+    Positive linear size; additional restrictions depend on the geometry.
 beta : float
-    Inverse temperature.
+    Positive inverse temperature, equal to the imaginary-time period.
 boundaries : str, optional
     Boundary condition ("periodic", "open").
 default_spin : int, optional
     Default link spin (+1 or -1).
 save_snapshots : bool, optional
-    If True, snapshots may be saved (not required for array returns).
+    Write GraphML snapshots in addition to returning arrays.
 path_out : pathlib.Path | None, optional
-    Output directory for snapshots when saving; ignored for in-memory arrays.
+    Existing snapshot directory; None uses the current directory.
 
 Returns
 -------
 series : numpy.ndarray (complex128), shape (n_obs, N_thermalization)
     Time series per observable during thermalization.
 acc_ratio : numpy.ndarray (float64), shape (N_thermalization,)
-    Acceptance ratio diagnostics during thermalization.
+    Raw Metropolis ratio (possibly > 1), or zero for an abandoned proposal.
+    Acceptance uses min(1, ratio); this array does not record success flags.
 
 Notes
 -----
+N_resamples is validated but unused by this workflow. Snapshots are recorded
+after proposal 1 and every 10000 proposals thereafter. Real observables have
+zero imaginary part; other entries pack paired real estimators. Returned
+arrays own their data. With no observables, series has shape (0, 0).
 )pbdoc")
     );
 
@@ -355,24 +361,24 @@ Notes
         py::arg("save_snapshots") = false,
         py::arg("path_out") = py::none(),
         py::doc(R"pbdoc(
-Run a QMC simulation of the extended toric code and return observables and statistics.
+Thermalize a fresh lattice, then return sampled observables and statistics.
 
 Parameters
 ----------
 N_samples : int
-    Number of snapshots (stored samples).
+    Positive number of recorded samples.
 N_thermalization : int
-    Number of thermalization steps before sampling.
+    Non-negative number of initial update proposals.
 N_between_samples : int
-    Steps between stored samples (decorrelation).
+    Non-negative number of update proposals before each recorded sample.
 N_resamples : int, optional
-    Number of bootstrap resamples.
+    Positive number of bootstrap resamples; use at least two for error estimates.
 custom_therm : bool, optional
-    If True, use (h_therm, lmbda_therm) during thermalization.
+    Prepare at (h_therm, lmbda_therm), then ramp h followed by lmbda to the target.
 observables : list[str]
-    Observable names computed at every snapshot.
+    Observable names in the order used by all returned arrays.
 seed : int, optional
-    PRNG seed. 0 will lead to random seed.
+    Nonzero seeds reproduce a run; zero uses a fresh random seed.
 mu : float
     Hamiltonian parameter (star term).
 h : float
@@ -386,40 +392,43 @@ lmbda : float
 lmbda_therm : float
     Gauge field used during thermalization if `custom_therm=True`.
 basis : {'x','z'}, optional
-    Basis for the templated backend; selects the implementation at runtime.
+    Spin eigenbasis; selects the C++ backend.
 lattice_type : str
-    Lattice type (e.g. "triangular").
+    Geometry: "square", "cubic", "honeycomb", "triangular", or "kagome".
 system_size : int
-    Linear system size of the lattice.
+    Positive linear size; additional restrictions depend on the geometry.
 beta : float
-    Inverse temperature.
+    Positive inverse temperature, equal to the imaginary-time period.
 boundaries : str, optional
     Boundary condition ("periodic", "open").
 default_spin : int, optional
     Default link spin (+1 or -1).
 save_snapshots : bool, optional
-    If True, snapshots may be saved (not required for array returns).
+    Write GraphML snapshots in addition to returning arrays.
 path_out : pathlib.Path | None, optional
-    Output directory for snapshots when saving; ignored for in-memory arrays.
+    Existing snapshot directory; None uses the current directory.
 
 Returns
 -------
 series : numpy.ndarray (complex128), shape (n_obs, N_samples)
     Time series per observable.
 mean : numpy.ndarray (float64), shape (n_obs,)
-    Sample mean per observable.
+    Bias-corrected bootstrap estimate per observable.
 std : numpy.ndarray (float64), shape (n_obs,)
-    Bootstrap standard deviation per observable.
+    Bootstrap standard error of the estimate.
 binder : numpy.ndarray (float64), shape (n_obs,)
-    Binder ratio (or analogous) per observable.
+    Binder ratio; unused estimator categories return zero.
 binder_std : numpy.ndarray (float64), shape (n_obs,)
     Bootstrap error of the Binder ratio.
 tau_int : numpy.ndarray (float64), shape (n_obs,)
-    Integrated autocorrelation time estimate.
+    Integrated autocorrelation time in recorded-sample units.
 
 Notes
 -----
-Complex observables are returned as complex128; real ones have zero imaginary part.
+All series use complex128. Real observables have zero imaginary part; other
+entries pack paired real estimators for Fredenhagen-Marcu or susceptibility.
+The returned arrays own their data. Snapshots include every recorded sample.
+With no requested observables, series has shape (0, 0).
 )pbdoc")
     );
 
@@ -532,22 +541,22 @@ Complex observables are returned as complex128; real ones have zero imaginary pa
         py::arg("save_snapshots") = false,
         py::arg("paths_out") = py::none(),
         py::doc(R"pbdoc(
-Run a QMC hysteresis sweep of the extended toric code and return stacked observables across steps.
+Traverse paired field schedules once while retaining the lattice state.
 
 Parameters
 ----------
 N_samples : int
-    Number of snapshots per hysteresis step.
+    Positive number of samples per schedule point.
 N_thermalization : int
-    Number of thermalization steps before sampling.
+    Non-negative number of initial update proposals.
 N_between_samples : int
-    Steps between stored samples (decorrelation).
+    Non-negative number of update proposals before each recorded sample.
 N_resamples : int, optional
-    Number of bootstrap resamples.
+    Positive number of bootstrap resamples; use at least two for error estimates.
 observables : list[str]
-    Observable names computed at every snapshot.
+    Observable names in the order used by all returned arrays.
 seed : int, optional
-    PRNG seed. 0 will lead to random seed.
+    Nonzero seeds reproduce a run; zero uses a fresh random seed.
 mu : float
     Hamiltonian parameter (star term).
 h_hys : list[float]
@@ -557,21 +566,22 @@ J : float
 lmbda_hys : list[float]
     Gauge field values for each hysteresis step.
 basis : {'x','z'}, optional
-    Basis for the templated backend; selects the implementation at runtime.
+    Spin eigenbasis; selects the C++ backend.
 lattice_type : str
-    Lattice type (e.g. "triangular").
+    Geometry: "square", "cubic", "honeycomb", "triangular", or "kagome".
 system_size : int
-    Linear system size of the lattice.
+    Positive linear size; additional restrictions depend on the geometry.
 beta : float
-    Inverse temperature.
+    Positive inverse temperature, equal to the imaginary-time period.
 boundaries : str, optional
     Boundary condition ("periodic", "open").
 default_spin : int, optional
     Default link spin (+1 or -1).
 save_snapshots : bool, optional
-    If True, snapshots may be saved (not required for array returns).
+    Write GraphML snapshots in addition to returning arrays.
 paths_out : list[pathlib.Path] | None, optional
-    Output directories per step when saving; ignored for in-memory arrays.
+    Existing directories, one per schedule point when saving snapshots.
+    None uses the current directory for every point, overwriting the same file.
 
 Returns
 -------
@@ -585,7 +595,12 @@ tau2d : numpy.ndarray (float64), shape (n_steps, n_obs)
 
 Notes
 -----
-The number of steps `n_steps` equals `len(h_hys)` (and `len(lmbda_hys)`).
+The schedules must be nonempty and equally sized. The initial thermalization
+uses h = lmbda = 0, followed by N_thermalization // 4 proposals at each schedule
+point. This call follows the supplied order once; the Python CLI runs both
+forward and reverse branches separately. Series entries pack paired real
+estimators where needed; summary meanings match get_sample(). All arrays own
+their data. With no observables, series3d has shape (n_steps, 0, 0).
 )pbdoc")
     );
 }

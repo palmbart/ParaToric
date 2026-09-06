@@ -16,9 +16,16 @@
 
 namespace paratoric::statistics {
 
+// Bootstrap reducers return (bias-corrected estimate, standard error,
+// Binder ratio, Binder standard error). Paired inputs share resampled indices
+// to preserve their covariance. RNG pointers must be non-null; use at least
+// two resamples for meaningful standard errors.
+
 using RNG = paratoric::rng::RNG;
 
 /**
+ * @brief Estimate the stationary bootstrap's average block length from serial correlations.
+ *
  * Based on the following publications:
  *
  * Politis, D. N., & White, H. (2004). 
@@ -31,7 +38,8 @@ using RNG = paratoric::rng::RNG;
  * 
  * @param data the data which will be bootstrapped using the stationary bootstrap
  * 
- * @return the optimal block length for the stationary bootstrap
+ * @return Estimated mean block length; one for fewer than two samples or
+ *         degenerate covariance estimates.
  */
 inline double opt_block_length(const std::vector<double>& data) {
     // We use the convention 1/N for the autocorrelation here, not 1/(N-k)
@@ -104,18 +112,14 @@ inline double opt_block_length(const std::vector<double>& data) {
 }
 
 /**
- * Based on the following publication:
- *
- * Politis, D. N., & Romano, J. P. (1994). 
- * The Stationary Bootstrap. Journal of the American Statistical Association, 
- *  89(428), 1303-1313. https://doi.org/10.1080/01621459.1994.10476870
- * 
- * @param data the data which will be bootstrapped using the stationary bootstrap
- * @param average_block_length the block length (parameter of the stationary bootstrap)
- * @param sample_size the sample size of the bootstrap
- * @param rng the Mersenne Twister random number generator
- * 
- * @return a vector with the the bootstrapped indices of the original data
+ * @brief Draw circular blocks with geometrically distributed lengths.
+ * @param data Source series; only its length is used.
+ * @param average_block_length Mean block length; a new block starts with probability 1 / length.
+ * @param sample_size Number of indices to return.
+ * @param rng Shared generator whose stream is advanced.
+ * @return Indices into data, with consecutive blocks wrapping at its end.
+ * @pre data is nonempty, average_block_length >= 1, and rng is non-null.
+ * @see Politis and Romano (1994), https://doi.org/10.1080/01621459.1994.10476870.
  */
 inline std::vector<size_t> stationary_bootstrap(
     const std::vector<double>& data, double average_block_length, 
@@ -140,14 +144,11 @@ inline std::vector<size_t> stationary_bootstrap(
 }
 
 /**
- * @brief This function will perform n_iter stationary bootstraps of input data and return the mean, the Binder ratio and the standard error, respectively.
- * 
- * Autocorrelation effects are included in the stationary bootstrap.
- * 
- * @param data the data which will be bootstrapped using the stationary bootstrap
- * @param n_iter (optional) - the number of bootstraps, defaults to 1000
- * 
- * @return a tuple of the mean, the standard error of the mean, the Binder ratio and the standard error of the Binder ratio
+ * @brief Stationary-bootstrap mean and Binder ratio for a real series.
+ * @return (bias-corrected mean, mean error, bias-corrected Binder ratio, Binder error).
+ *         The Binder ratio is <x^4> / <x^2>^2; all-zero data uses zero.
+ * @pre data is nonempty, rng is non-null, and n_iter >= 2.
+ * @note Block length is estimated from data to retain serial correlations.
  */
 inline std::tuple<double, double, double, double> get_bootstrap_statistics(
     const std::vector<double>& data, std::shared_ptr<RNG> rng, 
@@ -194,15 +195,13 @@ inline std::tuple<double, double, double, double> get_bootstrap_statistics(
 }
 
 /**
- * @brief This function will perform n_iter stationary bootstraps of input half and full representing the half/full Wilson/'t Hooft loops of the Fredenhagen-Marcu. It returns the mean, the Binder ratio and the standard error, respectively.
- * 
- * Autocorrelation effects are included in the stationary bootstrap. Due to the non-trivial structure of the Fredenhagen-Marcu fraction, a custom function is required.
- * 
- * @param half the half-loop (numerator) of the Fredenhagen-Marcu which will be bootstrapped using the stationary bootstrap
- * @param full the full-loop (denominator) of the Fredenhagen-Marcu which will be bootstrapped using the stationary bootstrap
- * @param n_iter (optional) - the number of bootstraps, defaults to 1000
- * 
- * @return a tuple of the mean, the standard error of the mean, the Binder ratio and the standard error of the Binder ratio
+ * @brief Bootstrap <half> / sqrt(abs(<full>)) using paired loop samples.
+ * @param half Half Wilson/'t Hooft loop measurements.
+ * @param full Full-loop measurements aligned with half.
+ * @return (bias-corrected ratio, standard error, 0, 0); Binder statistics are unused.
+ * @pre Inputs are nonempty, rng is non-null, and n_iter >= 2.
+ * @throws std::invalid_argument If input lengths differ.
+ * @note A zero denominator contributes zero. Both loops use the same bootstrap indices.
  */
 inline std::tuple<double,double,double,double> get_bootstrap_statistics_fm(
     const std::vector<double>& half, const std::vector<double>& full, 
@@ -257,15 +256,14 @@ inline std::tuple<double,double,double,double> get_bootstrap_statistics_fm(
 }
 
 /**
- * @brief This function will perform n_iter stationary bootstraps of input half and full representing the connected and disconnected part of the susceptibility. It returns the mean, the Binder ratio and the standard error, respectively.
- * 
- * Autocorrelation effects are included in the stationary bootstrap. Due to the non-trivial structure of the susceptibility fraction, a custom function is required.
- * 
- * @param half the half-loop (numerator) of the Fredenhagen-Marcu which will be bootstrapped using the stationary bootstrap
- * @param full the full-loop (denominator) of the Fredenhagen-Marcu which will be bootstrapped using the stationary bootstrap
- * @param n_iter (optional) - the number of bootstraps, defaults to 1000
- * 
- * @return a tuple of the mean, the standard error of the mean, the Binder ratio and the standard error of the Binder ratio
+ * @brief Bootstrap the connected covariance <kL*kR> - <kL><kR>.
+ * @param kL First estimator component in sample order.
+ * @param kR Second component aligned with kL.
+ * @return (bias-corrected covariance, error, bias-corrected Binder ratio, Binder error).
+ *         Binder moments are taken from the product kL*kR.
+ * @pre rng is non-null and n_iter >= 2.
+ * @throws std::invalid_argument If lengths differ or fewer than two samples are supplied.
+ * @note Physical prefactors and disconnected-term corrections are applied by QMC.
  */
 inline std::tuple<double,double,double,double> get_bootstrap_statistics_susceptibility(
     const std::vector<double>& kL,
@@ -359,7 +357,18 @@ inline std::tuple<double,double,double,double> get_bootstrap_statistics_suscepti
 }
 
 
-// TODO
+/**
+ * @brief Bootstrap the off-diagonal static estimator from total event counts.
+ * @param kvec Total single-spin counts per sample.
+ * @param beta Imaginary-time period.
+ * @param h Active off-diagonal field coupling.
+ * @param Nsites Normalization count (the number of edges for QMC spin observables).
+ * @return (bias-corrected susceptibility, error, 0, 0), using
+ *         (Var(k) - <k>) / (beta * Nsites^2 * h^2).
+ * @pre beta and Nsites are positive, rng is non-null, and n_iter >= 2.
+ * @throws std::invalid_argument If fewer than two samples are supplied.
+ * @note At h == 0, returns four zeros by the estimator's zero-coupling convention.
+ */
 inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
     const std::vector<double>& kvec, double beta, double h, 
     double Nsites, std::shared_ptr<RNG> rng, size_t n_iter = 1000
@@ -395,27 +404,23 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
 
         double sumk = 0.0;
         double sumk2 = 0.0;
-        //double sumk4 = 0.0;
 
         for (auto i : idx) {
             const double k = kvec[i];
             sumk  += k;
             sumk2 += k * k;
-            //const double k2 = k * k;
-            //sumk4 += k2 * k2;
         }
 
         const double meank  = sumk  / N;
         const double meank2 = sumk2 / N;
-        //const double meank4 = sumk4 / N;
 
         // Moments  
         const double varK = (meank2 - meank * meank);
-        // Convert to intensive susceptibility per site:
+        // Normalize the covariance of the magnetization per edge.
         const double chi = (varK - meank) / (beta * Nsites * Nsites * h * h);
 
         chi_samples.push_back(chi);
-        // TODO
+        // Binder statistics are not defined for this count estimator.
         binder_samples.push_back( 0. );
     }
 
@@ -436,6 +441,17 @@ inline std::tuple<double,double,double,double> bootstrap_offdiag_susceptibility(
     return {chi_mean_bias_corrected, chi_std, binder_mean, binder_std};
 }
 
+/**
+ * @brief Bootstrap covariance of event counts in the two halves of imaginary time.
+ * @param kL Counts in [0, beta/2), one per sample.
+ * @param kR Counts in [beta/2, beta), aligned with kL.
+ * @param Nsites Normalization count (the number of edges for QMC spin observables).
+ * @return (bias-corrected covariance / Nsites^2, error, Binder ratio, Binder error).
+ *         Binder moments use kL*kR / Nsites; QMC applies coupling prefactors.
+ * @pre rng is non-null and n_iter >= 2.
+ * @throws std::invalid_argument If lengths differ, fewer than two samples are
+ *         supplied, or Nsites is non-positive.
+ */
 inline std::tuple<double,double,double,double> bootstrap_offdiag_dynamical_susceptibility(
     const std::vector<double>& kL, const std::vector<double>& kR, 
     double Nsites, std::shared_ptr<RNG> rng, size_t n_iter = 1000

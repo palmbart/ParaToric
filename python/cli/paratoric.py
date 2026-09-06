@@ -1,6 +1,8 @@
 # ParaToric - Continuous-time QMC for the extended toric code in the x/z-basis
 # Copyright (C) 2022-2026  Simon Mathias Linsel, Lode Pollet
 
+"""Parse sweep options and dispatch jobs to the C++ CLI through JobHandler."""
+
 import argparse as ap
 import logging
 from math import pi
@@ -22,10 +24,12 @@ if not logger.handlers:
 
 
 def cap_processes(args, limit):
+    """Cap the resolved worker count to the number of jobs, updating args."""
     args['processes'] = min(args['processes'], limit)
 
 
 def main(args):
+    """Dispatch parsed CLI settings; geometry keywords are shared by every job."""
     from job_handler import JobHandler
 
     lattice_params_list = ('lattice_type',

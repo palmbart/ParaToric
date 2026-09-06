@@ -12,6 +12,13 @@
 
 namespace paratoric {
 
+/**
+ * @brief Run QMC workflows and serialize results under simulation/results in obs.h5.
+ *
+ * Output directories are created as needed; existing obs.h5 files are replaced.
+ * Observable series use complex storage with real and imaginary estimator
+ * components, while summary statistics use scalar doubles.
+ */
 class IO {
     public:
         IO() = default;
@@ -109,13 +116,14 @@ class IO {
         );
 
     private:
+        /** @brief Open an existing HDF5 group or create it under parent. */
         template<typename Parent>
         static H5::Group getOrCreateGroup(Parent& parent, const std::string& name) {
             htri_t exists = H5Lexists(parent.getLocId(), name.c_str(), H5P_DEFAULT);
             if (exists > 0) {
                 return parent.openGroup(name);
             }
-            // either not existing or an error, just create
+            // Let HDF5 report creation failures, including errors from the existence check.
             return parent.createGroup(name);
         }
 };

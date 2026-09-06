@@ -12,9 +12,11 @@
 #include <vector>
 #include <string>
 
+// Workflow smoke tests cover both bases and several geometries/field regimes.
+// Short runs exercise update paths and consistency checks, not convergence.
 namespace paratoric {
 
-// High field parameter regime outsie of the topological phase
+// Higher-field parameters for update-path coverage.
 double h = 1.1;  
 double h_therm = 0.9;
 std::vector<double> h_hys {0.9, 1., 1.1};
@@ -24,7 +26,7 @@ std::vector<double> lmbda_hys {1.0, 1.1, 1.2};
 double mu = 0.9; 
 double J = 1.1; 
 
-// Low field parameter regime inside of the topological phase
+// Low-field parameters, including a zero off-diagonal coupling.
 double h_top = 0.1;  
 double h_therm_top = 0.0;
 std::vector<double> h_hys_top {0.9, 1., 1.1};
@@ -34,7 +36,7 @@ std::vector<double> lmbda_hys_top {0.05, 0.1, 0.15};
 double mu_top = 0.9; 
 double J_top = 1.1; 
 
-// Negative J parameter set
+// Negative diagonal J is allowed in the z-basis.
 double h_neg = 0.1;  
 double h_therm_neg = 0.0;
 std::vector<double> h_hys_neg {0.9, 1., 1.1};
@@ -564,9 +566,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_9) {
         .save_snapshots = 0
     };
 
-    // Honeycomb lattice does not yet support fredenhagen_marcu in x-basis and should throw std::invalid_argument in Debug mode
-    BOOST_WARN_THROW( auto result = mc.get_sample(Config{sim_spec, param_spec, lat_spec, out_spec});,
-        std::invalid_argument
+    auto result = mc.get_sample(
+        Config{sim_spec, param_spec, lat_spec, out_spec}
     );
 }
 
@@ -610,9 +611,8 @@ BOOST_AUTO_TEST_CASE(get_sample_test_10) {
         .save_snapshots = 0
     };
 
-    // Honeycomb lattice does not yet support fredenhagen_marcu in x-basis and should throw std::invalid_argument in Debug mode
-    BOOST_WARN_THROW( auto result = mc.get_sample(Config{sim_spec, param_spec, lat_spec, out_spec});,
-        std::invalid_argument
+    auto result = mc.get_sample(
+        Config{sim_spec, param_spec, lat_spec, out_spec}
     );
 }
 

@@ -1,4 +1,4 @@
-# python/pyproject.toml
+# Python package metadata; build the native extension with CMake.
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -10,7 +10,7 @@ description = "ParaToric QMC Python bindings"
 readme = "README.md"
 requires-python = ">=3.10"
 
-# --- Runtime dependencies pulled by pip ---
+# Runtime dependencies for arrays, plotting, and HDF5 output.
 dependencies = [
   "numpy>=1.24",
   "matplotlib>=3.6",

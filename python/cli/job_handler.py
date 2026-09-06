@@ -1,6 +1,8 @@
 # ParaToric - Continuous-time QMC for the extended toric code in the x/z-basis
 # Copyright (C) 2022-2026  Simon Mathias Linsel, Lode Pollet
 
+"""Run C++ CLI jobs, collect HDF5 output, and plot parameter sweeps."""
+
 from datetime import datetime
 from datetime import timedelta
 import h5py
@@ -10,7 +12,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
-#import numpy.typing as npt
 import os
 from pathlib import Path
 import subprocess
@@ -21,13 +22,20 @@ import uuid
 
 
 class JobHandler:
+    """Coordinate fresh subprocesses and combine their measurements.
+
+    Sweep methods write plots, parameters.txt, and simulation_data.h5 beneath
+    a unique run directory. Raw per-job obs.h5 files remain in its data folder.
+    Geometry is supplied through lattice_type, system_size, boundaries, and
+    default_spin keyword arguments; a Monte Carlo step is one update proposal.
+    """
+
     def __init__(self):
         self.obs_func_list = None
 
-        # Set up logging
         self.__set_up_logging()
 
-        # Here, all the observables get the right output function and a name for the plots
+        # Plot metadata is keyed by the same observable names as the QMC registry.
         self.obs_dict = [{'name': 'percolation_strength',
                          'type': 'real',
                          'output_str': 'Percolation strength',
@@ -180,6 +188,7 @@ class JobHandler:
         return 'real'
 
     def __warn_invalid_plot_data(self, context: str, **datasets):
+        """Log empty or nonfinite plot inputs without changing the data."""
         for name, values in datasets.items():
             array = np.asarray(values)
             if array.size == 0:
@@ -201,6 +210,7 @@ class JobHandler:
         return ''.join(f"{key}: {value}\n" for key, value in dictionary.items())
 
     def __construct_output_directory(self, output_dir: str | None, name: str, begin_time: str, subpathname: str):
+        """Create a unique run directory beneath output_dir (default: out)."""
         base_dir = Path(output_dir or 'out')
         outname = f"{name}_{begin_time}_{uuid.uuid4().hex}"
         out_path = base_dir / subpathname / outname
@@ -211,13 +221,16 @@ class JobHandler:
         return datetime.now().strftime('%d_%m_%Y-%H_%M_%S')
 
     def __paratoric_executable(self):
+        """Locate the repository's installed bin/paratoric executable."""
         return Path(__file__).resolve().parents[2] / 'bin' / 'paratoric'
 
     def __run_paratoric(self, args: list):
+        """Run one synchronous CLI job; propagate a nonzero exit as CalledProcessError."""
         command = [str(self.__paratoric_executable()), *map(str, args)]
         subprocess.run(command, check=True)
 
     def __write_hdf5_file(self, datasets: dict, path: str, filename: str = 'simulation_data.h5'):
+        """Replace the aggregate HDF5 file with gzip-compressed datasets."""
         with h5py.File(Path(path) / filename, 'w') as hf:
             for key, value in datasets.items():
                 hf.create_dataset(key, data=value, compression='gzip')
@@ -248,6 +261,11 @@ class JobHandler:
                                  basis: str = 'x',
                                  save_snapshots: bool = False,
                                  process_index: int = 0):
+        """Run one thermalization job and load its diagnostics.
+
+        Returns (proposal_indices, series, acceptance_ratios), with series
+        indexed [observable][proposal]. verbose is retained for worker-call compatibility.
+        """
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
         boundaries = self.lattice_params['boundaries']
@@ -279,7 +297,7 @@ class JobHandler:
 
         result = []
         with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
-            # acc_ratio is just a double and not complex
+            # Raw acceptance ratios use float64; observable series use complex128.
             acc_ratio = np.asarray(f['simulation/results/acc_ratio'][()])
             
             for obs_name in obs:
@@ -314,6 +332,11 @@ class JobHandler:
                         save_snapshots: bool = False,
                         full_time_series: bool = False,
                         process_index: int = 0):
+        """Run one sampling job and read its scalar statistics.
+
+        Returns (mean, mean_error, binder, binder_error, tau_int), each ordered by
+        observable. Full series and snapshots, when requested, remain on disk.
+        """
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
         boundaries = self.lattice_params['boundaries']
@@ -398,6 +421,11 @@ class JobHandler:
                             save_snapshots: bool = False,
                             full_time_series: bool = False,
                             process_index: int = 0):
+        """Run one schedule branch and load statistics shaped [point][observable].
+
+        Returns (mean, mean_error, binder, binder_error, tau_int). h_hys and lmbda_hys
+        are paired sequences of field values, with the same nonzero length.
+        """
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
         boundaries = self.lattice_params['boundaries']
@@ -431,7 +459,7 @@ class JobHandler:
             '--process_index', process_index,
         ])
 
-        # Here we expect that each number in the hdf5 has the structure 'r', 'i' (real and imaginary part)
+        # Summary datasets are real scalars, including for paired estimators.
         mean_result_array = np.empty(shape=[len(h_hys), len(obs)], dtype=np.float64)
         mean_error_result_array = np.empty(shape=[len(h_hys), len(obs)], dtype=np.float64)
         binder_result_array = np.empty(shape=[len(h_hys), len(obs)], dtype=np.float64)
@@ -488,6 +516,7 @@ class JobHandler:
                      radius: float, 
                      comment: str = ''):
 
+        """Plot one observable's statistics and add its arrays to hdf5_dict in place."""
         self.__warn_invalid_plot_data(
             f'{simulation}:{obs}',
             x=variable,
@@ -634,11 +663,11 @@ class JobHandler:
                        output_dir: str = '',
                        **kwargs):
 
+        """Run independent chains at evenly spaced temperatures, then save combined output."""
         begin_time = self.__get_datetime()
 
         self.__set_lattice_params(**kwargs)
 
-        # only get name dont change...
         output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h}_lmbda={lmbda}_mu={mu}_J={J}_T={T_lower}_to_{T_upper}", begin_time, 'etc_T_sweep')
 
         temperatures = np.linspace(T_lower, T_upper, T_steps)
@@ -667,9 +696,7 @@ class JobHandler:
 
         end_time = self.__get_datetime()
 
-        ###############
-        #   Output    #
-        ###############
+        # Save run metadata, plots, and aggregate measurements.
 
         sweep_params = {'N_samples': N_samples,
                         'N_thermalization': N_thermalization,
@@ -723,11 +750,15 @@ class JobHandler:
                           output_dir: str = '',
                           **kwargs):
 
+        """Run separate forward and reversed schedule branches.
+
+        Each branch retains its lattice between parameter points. The two branches
+        start fresh and can run in parallel; output includes both in traversal order.
+        """
         begin_time = self.__get_datetime()
 
         self.__set_lattice_params(**kwargs)
 
-        # only get name dont change...
         output_dir = self.__construct_output_directory(output_dir, f"lattice={self.lattice_params['lattice_type']}_bounds={self.lattice_params['boundaries']}_basis={basis}_L={self.lattice_params['system_size']}_h={h_hys[0]}_to_{h_hys[-1]}_lmbda={lmbda_hys[0]}_to_{lmbda_hys[-1]}_mu={mu}_J={J}_T={temperature}", begin_time, 'etc_hysteresis')
 
         beta = 1 / temperature
@@ -751,9 +782,7 @@ class JobHandler:
 
         end_time = self.__get_datetime()
 
-        ###############
-        #   Output    #
-        ###############
+        # Save run metadata, plots, and aggregate measurements.
 
         def all_equal(iterable):
             values = list(iterable)
@@ -824,6 +853,7 @@ class JobHandler:
                        output_dir: str = '',
                        **kwargs):
 
+        """Run independent chains at evenly spaced h values, then save combined output."""
         begin_time = self.__get_datetime()
 
         self.__set_lattice_params(**kwargs)
@@ -856,9 +886,7 @@ class JobHandler:
 
         end_time = self.__get_datetime()
 
-        ###############
-        #   Output    #
-        ###############
+        # Save run metadata, plots, and aggregate measurements.
 
         sweep_params = {'N_samples': N_samples,
                         'N_thermalization': N_thermalization,
@@ -915,6 +943,7 @@ class JobHandler:
                            output_dir: str = '',
                            **kwargs):
 
+        """Run independent chains at evenly spaced lmbda values, then save combined output."""
         begin_time = self.__get_datetime()
 
         self.__set_lattice_params(**kwargs)
@@ -947,9 +976,7 @@ class JobHandler:
 
         end_time = self.__get_datetime()
 
-        ###############
-        #   Output    #
-        ###############
+        # Save run metadata, plots, and aggregate measurements.
 
         sweep_params = {'N_samples': N_samples,
                         'N_thermalization': N_thermalization,
@@ -1005,6 +1032,11 @@ class JobHandler:
                             output_dir: str = '',
                             **kwargs):
 
+        """Run independent chains around a circle in (lmbda, h) space.
+
+        Angles are in radians, measured counterclockwise from the lmbda axis.
+        The circle is centered at (lmbda, h) with the supplied radius.
+        """
         begin_time = self.__get_datetime()
 
         self.__set_lattice_params(**kwargs)
@@ -1034,9 +1066,7 @@ class JobHandler:
 
         end_time = self.__get_datetime()
 
-        ###############
-        #   Output    #
-        ###############
+        # Save run metadata, plots, and aggregate measurements.
 
         sweep_params = {'N_samples': N_samples,
                         'N_thermalization': N_thermalization,
@@ -1092,6 +1122,7 @@ class JobHandler:
                               output_dir: str = '',
                               **kwargs):
 
+        """Average proposal-by-proposal diagnostics over repetitions and save the output."""
         begin_time = self.__get_datetime()
 
         self.__set_lattice_params(**kwargs)
@@ -1122,9 +1153,7 @@ class JobHandler:
 
         end_time = self.__get_datetime()
 
-        ###############
-        #   Output    #
-        ###############
+        # Save run metadata, plots, and aggregate measurements.
 
         therm_params = {'N_thermalization': N_thermalization,
                         'repetitions': repetitions,

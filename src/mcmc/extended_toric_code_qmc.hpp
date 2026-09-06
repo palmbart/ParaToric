@@ -36,9 +36,29 @@
 
 namespace paratoric {
 
+/// Supported compile-time spin bases.
 template<char B>
 concept ValidBasis = (B == 'x' || B == 'z');
 
+/**
+ * @brief Continuous-time Metropolis sampler for the extended toric code.
+ * @tparam Basis Spin eigenbasis, 'x' or 'z'; must match Config::lat_spec.basis.
+ *
+ * In the x-basis, edge and star terms are diagonal; single-spin and plaquette
+ * flips carry lmbda and J. In the z-basis, edge and plaquette terms are diagonal;
+ * single-spin and star flips carry h and mu. An update's "tuple" is a plaquette
+ * in the x-basis and a star in the z-basis.
+ *
+ * Lattice stores bare integrals of spins and spin products. This class applies
+ * the Hamiltonian minus signs and couplings to form the integrated potential
+ * energy and Metropolis ratios. Accepted proposals update event histories,
+ * the affected active caches, and the running energy together. A zero coupling
+ * may leave its bare cache stale; rebuild caches before changing couplings.
+ *
+ * Each workflow constructs its own lattice and shares this backend's RNG with
+ * it and the bootstrap routines. Copying the backend shares the RNG as well.
+ * A nonzero configured seed reseeds it; zero preserves its current state.
+ */
 template<char Basis>
 requires ValidBasis<Basis>
 class ExtendedToricCodeQMC {
@@ -48,6 +68,7 @@ class ExtendedToricCodeQMC {
         using SmallEnergyVector = Lattice::SmallEnergyVector;
         using SmallBoolVector = boost::container::small_vector<bool, 8>;
 
+        /** @brief Use the supplied RNG, or create one seeded by std::random_device. */
         ExtendedToricCodeQMC(std::shared_ptr<RNG> rng = nullptr) 
         : rng(rng ? std::move(rng) : std::make_shared<RNG>()) {};
 
@@ -218,17 +239,16 @@ class ExtendedToricCodeQMC {
         );
         
         /**
-         * @brief Here we "assemble" the types of the observables. Most of the observables are probably reals.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param observables contains the names of the observables
-         * 
-         * @return vector of observable types in the order of occurance in observables.
-         * 
+         * @brief Resolve observable statistics categories in input order.
+         * @param observables Registered observable names.
+         * @return Categories: "real", "fredenhagen_marcu", or "susceptibility".
+         * @throws std::invalid_argument If any name is not registered.
          */
         std::vector<std::string> get_obs_type_vec(const std::vector<std::string>& observables);
     
     private:
+        // Measurements receive (lattice, h, lmbda, mu, J). Complex results pack
+        // paired real estimators for the statistics routines below.
         std::function<double(Lattice&, double, double, double, double)> 
         percolation_probability_obs 
         = [](Lattice& lat, double h, double lmbda, double mu, double J) { 
@@ -449,7 +469,7 @@ class ExtendedToricCodeQMC {
                 return lat.get_anyon_count()/static_cast<double>(lat.get_plaquette_count()); 
         };
 
-        // This structure contains the name, the type (e.g. real, i.e. just a double) and the function of an observable.
+        /** @brief Registry entry connecting an observable to its estimator and statistics category. */
         struct Obs {
             public:
                 std::string obs_name;
@@ -459,7 +479,7 @@ class ExtendedToricCodeQMC {
                 > obs_func;
         };
 
-        // This vector contains the names of the observables (input as vector of strings: observables) and connects them to the appropriate function.  
+        // Keep each statistics category consistent with its estimator's packed values.
         std::vector<Obs> obs_vec = {
             {"anyon_count", "real", anyon_count_obs},
             {"anyon_density", "real", anyon_density_obs},
@@ -480,11 +500,9 @@ class ExtendedToricCodeQMC {
             {"plaquette_z", "real", plaquette_z_obs},
             {"sigma_x", "real", sigma_x_obs},
             {"sigma_x_static_susceptibility", "susceptibility", sigma_x_static_susceptibility_obs},
-            // TODO fix
             {"sigma_x_dynamical_susceptibility", "susceptibility", sigma_x_dynamical_susceptibility_obs},
             {"sigma_z", "real", sigma_z_obs},
             {"sigma_z_static_susceptibility", "susceptibility", sigma_z_static_susceptibility_obs},
-            // TODO fix
             {"sigma_z_dynamical_susceptibility", "susceptibility", sigma_z_dynamical_susceptibility_obs},
             {"staggered_imaginary_times", "real", staggered_imaginary_times_obs},
             {"star_x", "real", star_x_obs},
@@ -492,24 +510,23 @@ class ExtendedToricCodeQMC {
             };
         
         /**
-         * @brief Here we "assemble" the lambda functions for the observables. We use this vector to calculate the observables.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param observables contains the names of the observables
-         * 
-         * @return vector of lambda functions which can be applied to a lattice to extract the obervables.
-         * 
+         * @brief Resolve measurement functions in the requested observable order.
+         * @param observables Registered observable names.
+         * @return Functions taking (lattice, h, lmbda, mu, J).
+         * @throws std::invalid_argument If any name is not registered.
          */
         std::vector<std::function<std::variant< std::complex<double>, double>(Lattice&, double, double, double, double)>>
         get_obs_func_vec(
             const std::vector<std::string>& observables
         );
 
+        // Shared with the lattice and bootstrap so a configured seed covers the whole run.
         std::shared_ptr<RNG> rng;
         std::uniform_real_distribution<double> uniform_dist{0., 1.};
         static constexpr double PRECISION = std::numeric_limits<double>::epsilon();
         static constexpr double AUTOCORRELATION_WARNING_SAMPLE_FRACTION = 0.1;
 
+        /** @brief Draw an index in [0, bound); bound must be positive. */
         int random_index(int bound) {
             return static_cast<int>(
                 paratoric::rng::uniform_index(*rng, static_cast<std::uint64_t>(bound))
@@ -520,15 +537,18 @@ class ExtendedToricCodeQMC {
             return lower + (upper - lower) * uniform_dist(*rng);
         }
 
+        // Ratios at least one are accepted without consuming another random number.
         bool accept(double ratio) {
             return ratio >= 1.0 || uniform_dist(*rng) < ratio;
         }
 
+        /** @brief Boltzmann factor for a change already integrated over imaginary time. */
         static double boltzmann_weight(double energy_diff) {
             if (energy_diff == 0.) return 1.;
             return std::exp(-energy_diff);
         }
 
+        /** @brief Estimate tau_int in samples; warn when it exceeds 10% of the series length. */
         static double calculate_autocorrelation_time_with_warning(
             const std::vector<double>& obs_real,
             const std::string& observable_name,
@@ -539,27 +559,20 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Return the total potential energy (integrated over imaginary time) of the lattice lat.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
-         * @return the total integrated potential energy
-         * 
+         * @brief Recompute the coupled diagonal energy integral from event histories.
+         *
+         * Returns -h * edge_integral - mu * star_integral in the x-basis, or
+         * -lmbda * edge_integral - J * plaquette_integral in the z-basis.
+         * Zero-coupling terms are skipped; the running energy and caches are unchanged.
          */
         static double total_integrated_pot_energy(Lattice& lat, double h, double mu, double J, double lmbda);
 
         /**
-         * @brief Rebuild all bare-energy caches after a parameter stage and
-         *        synchronize the coupled integrated potential energy.
+         * @brief Rebuild diagonal caches, rotate the time origin, and recompute the energy.
          *
-         * Bare-energy cache updates may be skipped while their coupling is
-         * zero. Every workflow that changes couplings must call this method
-         * before starting the next Metropolis stage.
+         * Call before each stage that changes couplings, since updates may skip caches
+         * whose coupling is zero. Periodic calls also limit accumulated rounding error.
+         * The global time rotation preserves full-period integrals.
          */
         static void reinitialize_potential_energy(
             Lattice& lat, double& integrated_pot_energy,
@@ -567,32 +580,13 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Return the potential EDGE energy DIFFERENCE (integrated over imaginary time) when flipping the spin between imag_time_spin_flip and imag_time_next_spin_flip 
-         * on the edge between vertices source_v and target_v on the lattice lat.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * @param source_v the source vertex of the edge of interest
-         * @param target_v the target vertex of the edge of interest
-         * @param imag_time_spin_flip the lower bound for imaginary time
-         * @param imag_time_next_spin_flip the upper bound for imaginary time
-         * @param total_cache              If true, use cached integrated energies
-         *                                 and return @c -2*cache per affected tuple.
-         *                                 This is a constant-time fast path intended
-         *                                 for full-period flips (e.g., [0, β]).
-         *                                 Do not set for partial intervals.
-         * 
-         * @return the integrated potential energy difference
+         * @brief Edge contribution for reversing one spin on an ordered time interval.
          *
-         * @note If the active edge coupling is zero (@p h in the x-basis or
-         *       @p lmbda in the z-basis), both returned values are zero and
-         *       the bare-energy calculation is skipped. The cache is rebuilt
-         *       by reinitialize_potential_energy() before a later parameter stage.
-         * 
+         * @return (coupled change, bare edge-integral change). The coupled value is
+         *         -h times the bare change in the x-basis, or -lmbda times it in z.
+         * @param total_cache Use -2 * cached integral only for a full-period flip.
+         * @pre imag_time_spin_flip < imag_time_next_spin_flip.
+         * @note A zero active edge coupling returns two zeros without reading the cache.
          */
         static std::tuple<double, double> 
         integrated_pot_energy_diff_single_spin_flip_edge(
@@ -602,50 +596,14 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Integrated tuple–energy difference for a single spin flip on an edge.
+         * @brief Diagonal tuple contribution for reversing one edge's spin.
          *
-         * Computes the tuple (star/plaquette) energy change, integrated over the
-         * imaginary-time interval [@p imag_time_spin_flip, @p imag_time_next_spin_flip],
-         * when the spin on @p edg is flipped across that interval. The affected tuples
-         * are:
-         *  - Basis 'x': the two STARS at the endpoints of @p edg.
-         *  - Basis 'z': the PLAQUETTES adjacent to @p edg.
-         *
-         * Returns the per-tuple **bare** energy differences and the **coupled** scalar
-         * sum used for acceptance. Couplings are applied only to the scalar:
-         *  - Basis 'x': @c delta = -mu * sum(bare_diffs)
-         *  - Basis 'z': @c delta = -J  * sum(bare_diffs)
-         *
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         *
-         * @param lat                      Lattice object.
-         * @param h                        Electric-field coupling (unused here).
-         * @param mu                       Star coupling (used if Basis=='x').
-         * @param J                        Plaquette coupling (used if Basis=='z').
-         * @param lmbda                    Gauge-field coupling (unused here).
-         * @param edg                      Edge whose spin is flipped.
-         * @param imag_time_spin_flip      Lower bound of imaginary time (inclusive).
-         * @param imag_time_next_spin_flip Upper bound of imaginary time (inclusive).
-         * @param total_cache              If true, use cached integrated tuple energies
-         *                                 and return @c -2*cache per affected tuple.
-         *                                 This is a constant-time fast path intended
-         *                                 for full-period flips (e.g., [0, β]).
-         *                                 Do not set for partial intervals.
-         *
-         * @return std::tuple<
-         *           double,                 // coupled scalar delta (see above)
-         *           std::vector<int>,       // tuple indices: star centers (Basis 'x')
-         *                                   // or plaquette indices (Basis 'z')
-         *           std::vector<double>     // per-tuple **bare** energy differences on [t1,t2],
-         *                                   // aligned with the index vector
-         *         >
-         *
-         * @pre @p imag_time_next_spin_flip > @p imag_time_spin_flip. Interval must be non-zero.
-         * @note Per-tuple values are bare; apply couplings only when forming totals or acceptance ratios.
-         *       The order of indices matches the lattice adjacency.
-         * @note If the active tuple coupling is zero (@p mu in the x-basis or
-         *       @p J in the z-basis), the calculation is skipped and the
-         *       returned index and difference vectors are empty.
+         * @return (coupled change, affected indices, aligned bare integral changes).
+         *         Indices are endpoint stars in x, or adjacent plaquettes in z.
+         *         Only the scalar is multiplied by -mu (x) or -J (z).
+         * @param total_cache Use -2 * cached integrals only for a full-period flip.
+         * @pre imag_time_spin_flip < imag_time_next_spin_flip.
+         * @note A zero active tuple coupling returns zero and empty vectors.
          */
         static std::tuple<double, SmallIndexVector, SmallEnergyVector> 
         integrated_pot_energy_diff_single_spin_flip_tuple(
@@ -655,45 +613,18 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Integrated EDGE–energy difference for flipping all spins of a tuple.
+         * @brief Edge contributions for reversing every spin of an update tuple.
          *
-         * Computes the (bare) edge–energy change for each edge in @p tuple_edges,
-         * integrated over [@p imag_time_spin_flip, @p imag_time_next_spin_flip],
-         * when the spins on those edges are flipped across that interval. Returns the
-         * per-edge **bare** differences and the **coupled** scalar sum used for
-         * acceptance. Couplings are applied only to the scalar:
-         *  - Basis 'x': @c delta = -h * sum(bare_edge_diffs)
-         *  - Basis 'z': @c delta = -lmbda * sum(bare_edge_diffs)
-         *
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         *
-         * @param lat                       Lattice object.
-         * @param h                         Electric-field coupling (used if Basis=='x').
-         * @param mu                        Star coupling (unused here).
-         * @param J                         Plaquette coupling (unused here).
-         * @param lmbda                     Gauge-field coupling (used if Basis=='z').
-         * @param tuple_index               Index of the tuple (for bookkeeping).
-         * @param tuple_edges               Edges belonging to the tuple; order is preserved.
-         * @param imag_time_spin_flip       Lower bound of imaginary time (inclusive).
-         * @param imag_time_next_spin_flip  Upper bound of imaginary time (inclusive).
-         * @param total_cache               If true, use cached integrated edge energies and
-         *                                  return @c -2 * cache for each edge. This is a
-         *                                  constant-time fast path intended for full-period
-         *                                  flips (e.g., [0, β]). Do not set for partial intervals.
-         *
-         * @return std::tuple<
-         *           double,                         // coupled scalar delta (see above)
-         *           std::span<Lattice::Edge>,     // echo of @p tuple_edges (same order)
-         *           std::vector<double>             // per-edge **bare** energy differences on [t1,t2],
-         *                                           // aligned with the returned edge vector
-         *         >
-         *
-         * @pre @p imag_time_next_spin_flip > @p imag_time_spin_flip (non-zero interval).
-         * @note Per-edge values are bare; apply couplings only when forming totals or acceptance ratios.
-         * @note If the active edge coupling is zero, the calculation is skipped
-         *       and the returned difference vector contains one zero per edge.
-         * @note The second return component mirrors the input edges by value; consider
-         *       using a view/reference in hot paths to avoid copies.
+         * @return (coupled sum, borrowed tuple_edges view, aligned bare changes).
+         *         Only the sum is multiplied by -h (x) or -lmbda (z).
+         * @param total_cache Use -2 * cached integrals only for a full-period flip.
+         * @param interval_has_no_inner_flips Use the constant-spin fast path; the caller
+         *        must ensure no event lies strictly inside the interval on any edge.
+         * @param known_flip_indices Optional ranks of known_flip_time in each edge's
+         *        full history, aligned with tuple_edges; empty requests fresh searches.
+         * @param known_flip_time Event time bordering the interval for the cached ranks.
+         * @pre imag_time_spin_flip < imag_time_next_spin_flip.
+         * @note A zero active coupling returns a zero sum and one zero per edge.
          */
         static std::tuple<double, std::span<const Lattice::Edge>, SmallEnergyVector> 
         integrated_pot_energy_diff_tuple_flip_edge(
@@ -706,52 +637,16 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Integrated EDGE–energy difference for a “combination” tuple update.
+         * @brief Edge contributions for a tuple event paired with one single event per edge.
          *
-         * Computes, for each edge in @p tuple_edges, the (bare) edge–energy change
-         * integrated over [@p tau_left, @p tau_right] when a tuple flip occurs at
-         * @p imag_time_tuple_flip and a single–spin flip on that same edge occurs at
-         * @p imag_time_spin_flips[i]. The per–edge bare differences are summed into a
-         * **coupled** scalar used for acceptance:
-         *  - Basis 'x': @c delta = -h      * sum(bare_edge_diffs)
-         *  - Basis 'z': @c delta = -lmbda  * sum(bare_edge_diffs)
-         *
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         *
-         * @param lat                   Lattice object.
-         * @param h                     Electric–field coupling (used if Basis=='x').
-         * @param mu                    Star coupling (unused here).
-         * @param J                     Plaquette coupling (unused here).
-         * @param lmbda                 Gauge–field coupling (used if Basis=='z').
-         * @param tuple_index           Index of the tuple (for bookkeeping).
-         * @param tuple_edges           Edges belonging to the tuple; order is preserved.
-         * @param imag_time_tuple_flip  Imaginary time of the tuple flip.
-         * @param imag_time_spin_flips  Per–edge single–flip times aligned with @p tuple_edges;
-         *                              @c imag_time_spin_flips[i] is the time on @c tuple_edges[i].
-         * @param tau_left              Lower bound of the integration interval (inclusive).
-         * @param tau_right             Upper bound of the integration interval (inclusive).
-         * @param create_vector         For each edge, whether a single flip is created (true)
-         *                              or removed (false). (Currently not used in the integral.)
-         * @param tuple_destroy         Whether the tuple flip is destroyed (true) or created (false).
-         *                              (Currently not used in the integral.)
-         *
-         * @return std::tuple<
-         *           double,                         // coupled scalar delta (see above)
-         *           std::span<Lattice::Edge>,     // echo of @p tuple_edges (same order)
-         *           std::vector<double>             // per–edge **bare** energy differences on [tau_left,tau_right],
-         *                                           // aligned with the returned edge vector
-         *         >
-         *
-         * @pre @p tau_right > @p tau_left.  Interval must be non-zero.
-         * @pre @p imag_time_spin_flips.size() == @p tuple_edges.size().
-         *
-         * @note Per–edge values are **bare**; couplings are applied only to the scalar sum.
-         * @note If the active edge coupling is zero, the calculation is skipped
-         *       and the returned difference vector contains one zero per edge.
-         * @note The local schedule per edge is {(@p imag_time_tuple_flip, tuple), (@p imag_time_spin_flips[i], single)}.
-         *       Equal–time flips are combined by parity; order does not affect the integral.
-         * @note The parameters @p create_vector and @p tuple_destroy are accepted for interface
-         *       symmetry but are not currently used in the computation.
+         * @return (coupled sum, borrowed tuple_edges view, aligned bare changes).
+         *         Only the sum is multiplied by -h (x) or -lmbda (z).
+         * @param imag_time_spin_flips Single-event times aligned with tuple_edges.
+         * @param create_vector Creation/deletion flags; unused when computing the integral.
+         * @param tuple_destroy Tuple creation/deletion flag; unused in the integral.
+         * @pre tau_left < tau_right and imag_time_spin_flips.size() == tuple_edges.size().
+         * @note Equal-time event pairs cancel by parity. A zero active coupling returns
+         *       a zero sum and one zero per edge.
          */
         static std::tuple<double, std::span<const Lattice::Edge>, SmallEnergyVector> 
         integrated_pot_energy_diff_combination_flip_edge(
@@ -763,56 +658,17 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Integrated TUPLE–energy difference for a “combination” update.
+         * @brief Diagonal tuple contributions for a combination update.
          *
-         * Computes the (bare) tuple energy change integrated over
-         * [@p tau_left, @p tau_right] when a tuple flip occurs at
-         * @p imag_time_tuple_flip and, on the same tuple, single–spin flips occur on
-         * its edges at the times in @p imag_time_spin_flips. The affected tuples are:
-         *  - Basis 'x' → STARS at the endpoints of the tuple edges.
-         *  - Basis 'z' → PLAQUETTES adjacent to the tuple edges.
-         *
-         * Returns the per-tuple **bare** energy differences (aligned with the returned
-         * index vector) and the **coupled** scalar sum used for acceptance:
-         *  - Basis 'x': @c delta = -mu * sum(bare_tuple_diffs)
-         *  - Basis 'z': @c delta = -J  * sum(bare_tuple_diffs)
-         *
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         *
-         * @param lat                   Lattice object.
-         * @param h                     Electric-field coupling (unused here).
-         * @param mu                    Star coupling (used if Basis=='x').
-         * @param J                     Plaquette coupling (used if Basis=='z').
-         * @param lmbda                 Gauge-field coupling (unused here).
-         * @param tuple_index           Index of the tuple (bookkeeping).
-         * @param tuple_edges           Edges that form the tuple; order is preserved.
-         * @param imag_time_tuple_flip  Imaginary time of the tuple flip event.
-         * @param imag_time_spin_flips  Per-edge single-flip times aligned with
-         *                              @p tuple_edges; @c imag_time_spin_flips[i] is
-         *                              the time on @c tuple_edges[i].
-         * @param tau_left              Lower bound of the integration interval (inclusive).
-         * @param tau_right             Upper bound of the integration interval (inclusive).
-         * @param create_vector         For each edge, whether a single flip is created (true)
-         *                              or removed (false). (Accepted for symmetry; not used here.)
-         * @param tuple_destroy         Whether the tuple flip is destroyed (true) or created (false).
-         *                              (Accepted for symmetry; not used here.)
-         *
-         * @return std::tuple<
-         *           double,                 // coupled scalar delta (see above)
-         *           std::vector<int>,       // tuple indices: star centers (Basis 'x')
-         *                                   // or plaquette indices (Basis 'z')
-         *           std::vector<double>     // per-tuple **bare** energy differences on [tau_left,tau_right],
-         *                                   // aligned with the index vector
-         *         >
-         *
-         * @pre @p tau_right > @p tau_left (non-zero interval).
-         * @pre @p imag_time_spin_flips.size() == @p tuple_edges.size().
-         *
-         * @note “Bare” means couplings are NOT applied to the per-tuple values.
-         *       Couplings are applied only to the returned scalar @c delta.
-         * @note If the active tuple coupling is zero, the calculation is skipped
-         *       and the returned index and difference vectors are empty.
-         * @note Equal-time flips are combined by parity; their order does not affect the integral.
+         * @return (coupled sum, sorted affected indices, aligned bare changes).
+         *         Affected tuples are stars in x or plaquettes in z; only the scalar
+         *         is multiplied by -mu (x) or -J (z).
+         * @param tuple_index Update plaquette index in x, or star center in z.
+         * @param imag_time_spin_flips Single-event times aligned with tuple_edges.
+         * @param create_vector Creation/deletion flags; unused in the integral.
+         * @param tuple_destroy Tuple creation/deletion flag; unused in the integral.
+         * @pre tau_left < tau_right and imag_time_spin_flips.size() == tuple_edges.size().
+         * @note A zero active tuple coupling returns zero and empty vectors.
          */
         static std::tuple<double, SmallIndexVector, SmallEnergyVector> 
         integrated_pot_energy_diff_combination_flip_tuple(
@@ -824,21 +680,16 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Perform tuple combination update, where both tuple and 
-         * single spin flips are created/destroyed.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param tuple_edges the vector which stores the edges of the tuple
-         * @param imag_time_tuple_flip the imaginary time of the tuple flip that is created or destroyed
-         * @param imag_time_spin_flips vector which contains the imaginary times of the single spin flips 
-         * that are created or destroyed.
-         * @param create_vector vector which contains the information if single spin flip is added (1) 
-         * or removed (0) on the tuple edges. Order of edges is identical to imag_time_spin_flips.
-         * @param tuple_destroy if the tuple is destroyed (1) or created (0)
-         * 
+         * @brief Commit the event-history changes of an accepted combination update.
+         *
+         * @param tuple_index Plaquette index in x, or star center in z.
+         * @param tuple_edges Edges of that tuple, in the order of the per-edge arrays.
+         * @param imag_time_tuple_flip Tuple event to insert or remove.
+         * @param imag_time_spin_flips Single-event times aligned with tuple_edges.
+         * @param create_vector True inserts a single event; false removes an existing one.
+         * @param tuple_destroy True removes the tuple event; false inserts it.
+         * @pre Both per-edge arrays have tuple_edges.size() entries.
+         * @note The caller updates energy caches separately. h and mu are unused.
          */
         static void combination_flip(
             Lattice& lat, double h, double mu, 
@@ -848,19 +699,8 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings update where a pair of single spin flips is created/destroyed.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose inserting or removing two single-spin events on one edge.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_double_single_spin_flip(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -868,19 +708,8 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings update where a single spin flip is moved in imaginary time.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose moving one single-spin event within its neighboring-event window.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_single_spin_flip_move(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -888,19 +717,8 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings update where the spin is flipped globally on a random edge.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose reversing one edge's spin over the full imaginary-time period.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_global_single_spin_flip(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -909,19 +727,8 @@ class ExtendedToricCodeQMC {
 
 
         /**
-         * @brief Metropolis-Hastings update where the spin is flipped globally on a random tuple.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose reversing every spin of one tuple over the full time period.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_global_tuple_flip(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -929,19 +736,8 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings update where a pair of tuple flips is created/destroyed.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose inserting or removing two events on one update tuple.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_double_tuple_flip(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -949,19 +745,8 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings update where a tuple flip is moved in imaginary time.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose moving a tuple event within the common window of its edges.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_single_tuple_flip_move(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -969,19 +754,8 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings update where a tuple flip and single spin flips on the same tuple are created/destroyed.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Propose creating/removing a tuple event and one single event per edge.
+         * @see metropolis_step() for shared argument and acceptance-diagnostic contracts.
          */
         void metropolis_step_spin_tuple_combination(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -989,19 +763,18 @@ class ExtendedToricCodeQMC {
         );
 
         /**
-         * @brief Metropolis-Hastings helper function that distributes updates randomly.
-         * 
-         * @tparam Basis eigenbasis of the spins, either 'x' or 'z'
-         * @param lat the lattice object
-         * @param integrated_pot_energy the integrated potential energy of the system. Used for diagnostics.
-         * @param acc_ratio the update acceptance ratio. If update is abandoned before calculating the acceptance probability, 
-         * it is set to 0. Used for diagnostics
-         * @param beta the inverse temperature 
-         * @param h the Hamiltonian parameter (electric field term)
-         * @param mu the Hamiltonian parameter (star term)
-         * @param J the Hamiltonian parameter (plaquette term)
-         * @param lmbda the Hamiltonian parameter (gauge field term)
-         * 
+         * @brief Choose one of the seven proposal types with equal probability.
+         *
+         * @param lat Lattice whose histories and active caches are changed on acceptance.
+         * @param integrated_pot_energy Running coupled integral; changed only on acceptance.
+         * @param acc_ratio Receives the raw Metropolis ratio, possibly greater than one,
+         *        or zero for an abandoned proposal. Acceptance uses min(1, ratio);
+         *        this diagnostic is not an accepted/rejected flag.
+         * @param beta Imaginary-time period.
+         * @param h Electric-field coupling.
+         * @param mu Star coupling.
+         * @param J Plaquette coupling.
+         * @param lmbda Gauge-field coupling.
          */
         void metropolis_step(
             Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta, 
@@ -1158,15 +931,13 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_tuple(
         if (mu == 0.) return {0., SmallIndexVector{}, SmallEnergyVector{}};
         auto [bare_energy, star_centers, bare_star_potential_energy_diffs]
         = lat.integrated_star_energy_diff(edg, imag_time_spin_flip, imag_time_next_spin_flip, total_cache);
-        delta_energy_tuple = -mu * bare_energy; // No "/ 2"!
-        //for (double& x : bare_star_potential_energy_diffs) x *= -mu;
+        delta_energy_tuple = -mu * bare_energy; // The bare change already includes the factor -2.
         return {delta_energy_tuple, std::move(star_centers), std::move(bare_star_potential_energy_diffs)};
     } else if constexpr (Basis == 'z') {
         if (J == 0.) return {0., SmallIndexVector{}, SmallEnergyVector{}};
         auto [bare_energy, plaquette_indices, bare_plaquette_potential_energy_diffs]
         = lat.integrated_plaquette_energy_diff(edg, imag_time_spin_flip, imag_time_next_spin_flip, total_cache);
-        delta_energy_tuple = -J * bare_energy; // No "/ 2"!
-        //for (double& x : bare_plaquette_potential_energy_diffs) x *= -J;
+        delta_energy_tuple = -J * bare_energy; // The bare change already includes the factor -2.
         return {delta_energy_tuple, std::move(plaquette_indices), std::move(bare_plaquette_potential_energy_diffs)};
     } 
     return {0., SmallIndexVector{}, SmallEnergyVector{}};
@@ -1345,13 +1116,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
 #endif
 
     if (Basis == 'x' && (lmbda == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
 
     if (Basis == 'z' && (h == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
@@ -1439,7 +1208,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
                 }
             } 
         } else [[unlikely]] {  
-            // The acceptance ratio is set to zero for diagnostics
             acc_ratio = 0.;
         }
     } else { // create a pair of single spin flips
@@ -1487,7 +1255,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_single_spin_flip --- Random numbers very close to each other.";
 #endif
-            // The acceptance ratio is set to zero for diagnostics
             acc_ratio = 0.; 
             return;
         } else [[likely]] {
@@ -1546,13 +1313,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
 #endif
 
     if (Basis == 'x' && (lmbda == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
 
     if (Basis == 'z' && (h == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
@@ -1597,14 +1362,12 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- Random numbers very close to each other.";
 #endif
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             } else {
                 double integrated_pot_energy_diff = 0.;
                 double integrated_pot_energy_diff_edge = 0.;
                 double bare_pot_energy_diff_edge = 0.;
-                //double integrated_pot_energy_diff_tuple = 0.;
                 SmallIndexVector pot_energy_tuple_indices;
                 SmallEnergyVector pot_energy_diffs;
                 if (new_imag_time > imag_time_spin_flip) {
@@ -1668,16 +1431,12 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_spin_flip_move --- Random numbers very close to each other.";
 #endif
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             } else {
                 double integrated_pot_energy_diff = 0.;
                 double integrated_pot_energy_diff_edge = 0.;
                 double bare_pot_energy_diff_edge = 0.;
-                //double integrated_pot_energy_diff_tuple = 0.;
-                //std::vector<int> pot_energy_tuple_indices;
-                //std::vector<double> pot_energy_diffs;
 
                 if (random_spin_flip_index_lat == 0 && new_imag_time < imag_time_spin_flip) {
                     std::tie(integrated_pot_energy_diff_edge, bare_pot_energy_diff_edge) 
@@ -2050,13 +1809,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
 #endif
 
     if (Basis == 'x' && (J == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
 
     if (Basis == 'z' && (mu == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
@@ -2151,7 +1908,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
                 }
             }
         } else [[unlikely]] {
-            // The acceptance ratio is set to zero for diagnostics
             acc_ratio = 0.;
         }
     } else { // create tuples
@@ -2202,7 +1958,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
 #ifndef NDEBUG
             BOOST_LOG_TRIVIAL(debug) << "metropolis_step_double_tuple_flip --- Random numbers very close to each other.";
 #endif
-            // The acceptance ratio is set to zero for diagnostics
             acc_ratio = 0.; 
             return;
         } else {
@@ -2250,13 +2005,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #endif
 
     if (Basis == 'x' && (J == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
 
     if (Basis == 'z' && (mu == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
@@ -2313,7 +2066,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- Random numbers very close to each other.";
 #endif
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             } else {
@@ -2365,7 +2117,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
             BOOST_LOG_TRIVIAL(debug) << std::format("metropolis_step_single_tuple_flip_move --- New imaginary time: {}", new_imag_time);
 #endif 
 
-            //double integrated_pot_energy_diff = 0.;
 
             if (std::abs(new_imag_time - imag_time_tuple_flip) < PRECISION 
             || std::abs(new_imag_time - tau_left) < PRECISION 
@@ -2374,7 +2125,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_single_tuple_flip_move --- Random numbers very close to each other.";
 #endif
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             } else if (tau_left > imag_time_tuple_flip) { // Potentially over beta left
@@ -2569,13 +2319,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #endif
 
     if (Basis == 'x' && (J == 0 || lmbda == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
 
     if (Basis == 'z' && (mu == 0 || h == 0)) {
-        // The acceptance ratio is set to zero for diagnostics
         acc_ratio = 0.; 
         return;
     }
@@ -2649,7 +2397,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
                 r = 1. / ((imag_time_next_tuple_flip-imag_time_prev_tuple_flip) * mu);
             }
         } else [[unlikely]] {
-            // The acceptance ratio is set to zero for diagnostics
             acc_ratio = 0.; 
             return;
         }
@@ -2692,7 +2439,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 
 #ifndef NDEBUG
             if (lat.check_spin_flips_present_tuple(tuple_edges, tau_new)) {
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
@@ -2702,7 +2448,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_spin_tuple_combination --- Random numbers very close to each other.";
 #endif
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
@@ -2713,7 +2458,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
                 r = (tau_right-tau_left) * mu;
             }
         } else {
-            // The acceptance ratio is set to zero for diagnostics
             acc_ratio = 0.; 
             return;
         }
@@ -2726,7 +2470,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
     create_vector.reserve(tuple_edges.size());
     flip_times.reserve(tuple_edges.size());
 
-    // These variables determine the range in which the potential energy can change (potentially :D)
+    // Bound the time interval affected by the tuple and all per-edge events.
     double tau_right_potential_energy = tau_right;
     double tau_left_potential_energy = tau_left;
 
@@ -2765,7 +2509,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #endif  
 
             if (single_spin_flip_count == 0) [[unlikely]] {
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
@@ -2782,7 +2525,6 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
             }
 
             if (tau_spin_flip_index == -1 || tau_spin_flip_index == single_spin_flip_count) [[unlikely]] {
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
@@ -2832,13 +2574,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
 #ifndef NDEBUG
                 BOOST_LOG_TRIVIAL(debug) << "metropolis_step_spin_tuple_combination --- Random numbers very close to each other.";
 #endif
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
 
             if (std::abs(tau_spin_flip - tau_new) < PRECISION) [[unlikely]] {
-                // The acceptance ratio is set to zero for diagnostics
                 acc_ratio = 0.; 
                 return;
             }
@@ -3014,7 +2754,7 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
     const auto thermalization_count = static_cast<size_t>(std::max(config.sim_spec.N_thermalization, 0));
     std::vector<double> acc_ratio_vector;
     acc_ratio_vector.reserve(thermalization_count);
-    // Vector to store observable results for all snapshots
+    // Series: [observable][sample], in the requested observable order.
     std::vector<std::vector<std::variant< std::complex<double>, double>>> observable_vector;
     observable_vector.reserve(config.sim_spec.observables.size());
     for (const auto& obs_func : config.sim_spec.observables) {
@@ -3025,7 +2765,6 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
 
     auto obs_func_vec = get_obs_func_vec(config.sim_spec.observables);
 
-    // Initialize Lattice
     auto lat = Lattice(config.lat_spec, rng);
     
     double integrated_pot_energy = total_integrated_pot_energy(
@@ -3046,7 +2785,7 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
 
         if (metropolis_step_count == reset_potential_energy_count) [[unlikely]] {
             metropolis_step_count = 0;
-            // avoid accumulation of small numerical errors leading to bias
+            // Rebuild caches periodically to limit accumulated rounding error.
             reinitialize_potential_energy(
                 lat, integrated_pot_energy, config.param_spec.h, config.param_spec.mu,
                 config.param_spec.J, config.param_spec.lmbda
@@ -3118,7 +2857,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     auto obs_func_vec = get_obs_func_vec(config.sim_spec.observables);
     auto obs_type_vec = get_obs_type_vec(config.sim_spec.observables);
     
-    // Vector to store observable results for all snapshots
+    // Series: [observable][sample], in the requested observable order.
     const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
     std::vector<std::vector< std::variant< std::complex<double>, double> >> observable_vector;
     observable_vector.reserve(config.sim_spec.observables.size());
@@ -3133,7 +2872,6 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         observable_vector.back().reserve(sample_count);
     } 
 
-    // Initialize Lattice
     auto lat = Lattice(config.lat_spec, rng);
     
     double integrated_pot_energy = total_integrated_pot_energy(
@@ -3147,7 +2885,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             config.param_spec.J, config.param_spec.lmbda_therm
         );
 
-        // Pre-Thermalization 
+        // Prepare the state at the custom fields before ramping to the target.
         for (int i = 0; i < config.sim_spec.N_thermalization; ++i) {
             metropolis_step(
                 lat, integrated_pot_energy, acc_ratio, config.lat_spec.beta, 
@@ -3156,7 +2894,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             );
         }
 
-        // For sampling first order hysteresis
+        // Ramp h first, then lmbda; rebuild caches at every change of fields.
         double h_end = config.param_spec.h_therm;
         if (std::abs(config.param_spec.h - config.param_spec.h_therm) > PRECISION) {
             for (int i = 9; i > -1; --i) {
@@ -3220,7 +2958,7 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
             );
             if (metropolis_step_count == reset_potential_energy_count) [[unlikely]] {
                 metropolis_step_count = 0;
-                // avoid accumulation of small numerical errors leading to bias
+                // Rebuild caches periodically to limit accumulated rounding error.
                 reinitialize_potential_energy(
                     lat, integrated_pot_energy, config.param_spec.h, config.param_spec.mu,
                     config.param_spec.J, config.param_spec.lmbda
@@ -3270,12 +3008,10 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
 
             for (auto const& v : series) {
                 if (auto p = std::get_if<std::complex<double>>(&v)) {
-                    // v holds a complex<double>
                     obs_real.push_back(p->real());
                     obs_imag.push_back(p->imag());
                 }
                 else {
-                    // v must hold a double
                     double d = std::get<double>(v);
                     obs_real.push_back(d);
                     obs_imag.push_back(0.0);
@@ -3300,18 +3036,16 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
 
             for (auto const& v : series) {
                 if (auto p = std::get_if<std::complex<double>>(&v)) {
-                    // v holds a complex<double>
                     obs_real.push_back(p->real());
                     obs_imag.push_back(p->imag());
                 }
                 else {
-                    // v must hold a double
                     double d = std::get<double>(v);
                     obs_real.push_back(d);
                     obs_imag.push_back(0.0);
                 }
             }
-            //TODO fix this, every observable should just define their susceptibility function
+            // TODO: Store susceptibility reducers in the observable registry.
             if ((config.sim_spec.observables[k] == "sigma_z_static_susceptibility" && Basis == 'x')) {
                 const auto& [observable_mean, observable_std, binder_mean, binder_std] 
                 = paratoric::statistics::bootstrap_offdiag_susceptibility(
@@ -3430,7 +3164,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
     auto obs_func_vec = get_obs_func_vec(config.sim_spec.observables);
     auto obs_type_vec = get_obs_type_vec(config.sim_spec.observables);
     
-    // Vector to store observable results for all snapshots for all parameters
+    // Hysteresis series: [schedule point][observable][sample].
     std::vector<std::vector<std::vector<std::variant< std::complex<double>, double>>>> hys_vector;
     std::vector<std::vector<double>> hys_mean,
                                      hys_mean_std,
@@ -3438,7 +3172,6 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                                      hys_binder_std,
                                      hys_autocorrelation_time;
 
-    // Initialize Lattice
     auto lat = Lattice(config.lat_spec, rng);
     
     double integrated_pot_energy = total_integrated_pot_energy(
@@ -3467,7 +3200,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
     int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*100000);
 
     for (size_t n = 0; n < config.param_spec.h_hys.size(); n++) {
-        // Vector to store observable results for all snapshots
+        // Series: [observable][sample], in the requested observable order.
         const auto sample_count = static_cast<size_t>(std::max(config.sim_spec.N_samples, 0));
         std::vector<std::vector<std::variant< std::complex<double>, double>>> observable_vector;
         observable_vector.reserve(config.sim_spec.observables.size());
@@ -3516,7 +3249,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
             );
             if (metropolis_step_count == reset_potential_energy_count) [[unlikely]] {
                 metropolis_step_count = 0;
-                // avoid accumulation of small numerical errors leading to bias
+                // Rebuild caches periodically to limit accumulated rounding error.
                 reinitialize_potential_energy(
                     lat, integrated_pot_energy, h, config.param_spec.mu,
                     config.param_spec.J, lmbda
@@ -3533,7 +3266,7 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 );
                 if (metropolis_step_count == reset_potential_energy_count) [[unlikely]] {
                     metropolis_step_count = 0;
-                    // avoid accumulation of small numerical errors leading to bias
+                    // Rebuild caches periodically to limit accumulated rounding error.
                     reinitialize_potential_energy(
                         lat, integrated_pot_energy, h, config.param_spec.mu,
                         config.param_spec.J, lmbda
@@ -3558,7 +3291,6 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
                 const auto& series = observable_vector[k];
                 obs_real.reserve(series.size());
                 for (auto const& x : series) {
-                // if you know it's always a double here, use get<>
                 obs_real.emplace_back(std::get<double>(x));
                 }
 
@@ -3582,12 +3314,10 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
 
                 for (auto const& v : series) {
                     if (auto p = std::get_if<std::complex<double>>(&v)) {
-                        // v holds a complex<double>
                         obs_real.push_back(p->real());
                         obs_imag.push_back(p->imag());
                     }
                     else {
-                        // v must hold a double
                         double d = std::get<double>(v);
                         obs_real.push_back(d);
                         obs_imag.push_back(0.0);
@@ -3614,12 +3344,10 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
 
                 for (auto const& v : series) {
                     if (auto p = std::get_if<std::complex<double>>(&v)) {
-                        // v holds a complex<double>
                         obs_real.push_back(p->real());
                         obs_imag.push_back(p->imag());
                     }
                     else {
-                        // v must hold a double
                         double d = std::get<double>(v);
                         obs_real.push_back(d);
                         obs_imag.push_back(0.0);
@@ -3711,4 +3439,4 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
     };
 }
 
-} // namespace paratoric 
+} // namespace paratoric

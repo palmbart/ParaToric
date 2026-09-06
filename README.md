@@ -16,8 +16,8 @@ Contents
 --------
 
 * [Dependencies](#dependencies)
-* [Quickstart](#quickstart)
-* [Usage](#usage)
+* [Quickstart](#quickstart-cli)
+* [Usage](#usage-python-cli)
   - [$`T`$-sweep](#T-sweep)
   - [h-sweep](#h-sweep)
   - [$`\lambda`$-sweep](#lambda-sweep)
@@ -54,7 +54,7 @@ Usage (Python CLI)
 
 There are five ways to use ParaToric. We provide bindings to C/C++/Python and command line interfaces for C++/Python, see [documentation](doc/Documentation.pdf). Here we only briefly present the Python command line interface.
 
-A [Jupyter notebook](scripts/bash_creator.ipynb) for creating [SLURM][2] jobscripts is provided.
+A [Jupyter notebook](scripts/job_script_creator.ipynb) for creating [SLURM][2] jobscripts is provided.
 
 **General Python command line options**
 
@@ -64,7 +64,7 @@ A [Jupyter notebook](scripts/bash_creator.ipynb) for creating [SLURM][2] jobscri
 | `--simulation`               | `-sim`    | Simulation type                                                                    |
 | `--N_thermalization`         | `-Nth`    | Number of thermalization steps (i.e. proposed updates)                             |
 | `--N_samples`                | `-Ns`     | Number of samples                                                                  |
-| `--N_between_steps`          | `-Nbs`    | Number of steps between samples                                                    |
+| `--N_between_samples`        | `-Nbs`    | Number of proposed updates before each sample                                      |
 | `--N_resamples`              | `-Nr`     | Number of bootstrap resamples                                                      |
 | `--custom_therm`             | `-cth`    | Whether thermalization values of $`h`$ and $`\lambda`$ should be used (`0` or `1`) |
 | `--observables`              | `-obs`    | List of observables, e.g. `fredenhagen_marcu percolation_probability energy`       |

@@ -22,7 +22,7 @@ using paratoric::SimSpec;
 using paratoric::OutSpec;
 using paratoric::Result;
 
-/* ---------- thread-local error string ---------- */
+// Thread-local error string.
 
 static thread_local std::string g_last_error;
 
@@ -34,13 +34,13 @@ static void set_error(const char* what) {
     g_last_error = (what ? what : "unknown error");
 }
 
-/* ---------- Opaque handle ---------- */
+// Opaque handle.
 
 struct ptc_handle_t {
     std::unique_ptr<ExtendedToricCode> impl;
 };
 
-/* ---------- Small helpers: C<->C++ conversions ---------- */
+// Small helpers: C<->C++ conversions.
 
 static LatSpec to_cpp(const ptc_lat_spec_t& c) {
     LatSpec s{};
@@ -109,6 +109,7 @@ static Config to_cpp(const ptc_config_t& c) {
     return cfg;
 }
 
+// Validate pointer/length pairs before copying caller-owned arrays.
 static void validate_c_config(const ptc_config_t& c) {
     if (c.sim.N_observables > 0 && !c.sim.observables) {
         throw std::invalid_argument(
@@ -140,7 +141,7 @@ static void validate_c_config(const ptc_config_t& c) {
     }
 }
 
-/* ----- Result (C++) -> (C) ----- */
+// Result (C++) -> (C).
 
 static void free_series(ptc_series_t* s) {
     if (!s) return;
@@ -154,6 +155,8 @@ static void free_series(ptc_series_t* s) {
     s->nrows = 0;
 }
 
+// Copy C++ containers into independent C allocations; out must not own an
+// earlier result because its fields are overwritten before filling.
 static ptc_status_t fill_from_cpp(const Result& r, ptc_result_t* out) {
     if (!out) return PTC_STATUS_INVALID_ARGUMENT;
 
@@ -279,7 +282,7 @@ static ptc_status_t fill_from_cpp(const Result& r, ptc_result_t* out) {
     return PTC_STATUS_OK;
 }
 
-/* ---------- public API ---------- */
+// Public API.
 
 extern "C" ptc_status_t ptc_create(ptc_handle_t** out_handle) {
     if (!out_handle) {
@@ -330,6 +333,7 @@ extern "C" void ptc_result_destroy(ptc_result_t* r) {
     *r = ptc_result_t{};
 }
 
+// Centralize exception translation and result cleanup for all workflows.
 static ptc_status_t call_cpp(const ptc_config_t* c,
                              ptc_result_t* out,
                              Result (*fn)(const Config&))
