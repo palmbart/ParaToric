@@ -72,9 +72,12 @@ class ExtendedToricCodeQMC {
         ExtendedToricCodeQMC(std::shared_ptr<RNG> rng = nullptr) 
         : rng(rng ? std::move(rng) : std::make_shared<RNG>()) {};
 
+        /** @brief Release the observable registry and this backend's shared RNG ownership. */
         ~ExtendedToricCodeQMC() = default;
 
+        /** @brief Copy the backend state while sharing the same RNG. */
         ExtendedToricCodeQMC(ExtendedToricCodeQMC const&) = default;
+        /** @brief Replace the backend state with a copy and share the source's RNG. */
         ExtendedToricCodeQMC& operator=(ExtendedToricCodeQMC const&) = default;
 
         /**
@@ -533,11 +536,16 @@ class ExtendedToricCodeQMC {
             );
         }
 
+        /** @brief Draw a uniform time in [lower, upper) using the shared RNG; lower < upper. */
         double uniform_real(double lower, double upper) {
             return lower + (upper - lower) * uniform_dist(*rng);
         }
 
-        // Ratios at least one are accepted without consuming another random number.
+        /**
+         * @brief Accept a proposal with probability min(1, ratio).
+         * @param ratio Nonnegative Metropolis ratio.
+         * @note Ratios at least one are accepted without consuming another random number.
+         */
         bool accept(double ratio) {
             return ratio >= 1.0 || uniform_dist(*rng) < ratio;
         }
@@ -781,6 +789,7 @@ class ExtendedToricCodeQMC {
             double h, double mu, double J, double lmbda
         );
 
+        /** @brief Wrap a into [0, b); b must be positive. */
         template<typename T>
         requires std::integral<T> || std::floating_point<T>
         constexpr T modulo(T a, T b) {
@@ -793,6 +802,12 @@ class ExtendedToricCodeQMC {
             }
         }
 
+        /**
+         * @brief Compare floating-point values using absolute and relative tolerances.
+         * @param rel_tol Relative tolerance scaled by the larger absolute input value.
+         * @param abs_tol Absolute tolerance for differences near zero.
+         * @return True if either tolerance bounds the absolute difference.
+         */
         template<std::floating_point T>
         constexpr bool almost_equal(
             T a, T b, 
@@ -808,6 +823,7 @@ class ExtendedToricCodeQMC {
         }
 };
 
+/** @brief Resolve measurement functions in the requested observable order. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::vector<std::function<std::variant< std::complex<double>, double>(Lattice&, double, double, double, double)>> 
@@ -829,6 +845,7 @@ ExtendedToricCodeQMC<Basis>::get_obs_func_vec(const std::vector<std::string>& ob
     return result;
 }
 
+/** @brief Resolve observable statistics categories in input order. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::vector<std::string> 
@@ -850,6 +867,7 @@ ExtendedToricCodeQMC<Basis>::get_obs_type_vec(const std::vector<std::string>& ob
     return result;
 }
 
+/** @brief Recompute the coupled diagonal energy integral from event histories. */
 template<char Basis>
 requires ValidBasis<Basis>
 double ExtendedToricCodeQMC<Basis>::total_integrated_pot_energy(
@@ -872,6 +890,7 @@ double ExtendedToricCodeQMC<Basis>::total_integrated_pot_energy(
     }
 }
 
+/** @brief Rebuild diagonal caches, rotate the time origin, and recompute the energy. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::reinitialize_potential_energy(
@@ -883,6 +902,7 @@ void ExtendedToricCodeQMC<Basis>::reinitialize_potential_energy(
     integrated_pot_energy = total_integrated_pot_energy(lat, h, mu, J, lmbda);
 }
 
+/** @brief Edge contribution for reversing one spin on an ordered time interval. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::tuple<double, double> 
@@ -916,6 +936,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_edge(
     return {delta_energy_single, bare_energy_single};
 }
 
+/** @brief Diagonal tuple contribution for reversing one edge's spin. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::tuple<double, typename ExtendedToricCodeQMC<Basis>::SmallIndexVector, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
@@ -943,6 +964,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_single_spin_flip_tuple(
     return {0., SmallIndexVector{}, SmallEnergyVector{}};
 }
 
+/** @brief Edge contributions for reversing every spin of an update tuple. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::tuple<double, std::span<const Lattice::Edge>, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
@@ -991,6 +1013,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_tuple_flip_edge(
     return {delta_energy_single, tuple_edges, std::move(bare_energy_single_vector)};
 }
 
+/** @brief Edge contributions for a tuple event paired with one single event per edge. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::tuple<double, std::span<const Lattice::Edge>, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
@@ -1032,6 +1055,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_edge(
     return {energy_single_diff, tuple_edges, std::move(bare_energy_single_vector)};
 }
 
+/** @brief Diagonal tuple contributions for a combination update. */
 template<char Basis>
 requires ValidBasis<Basis>
 std::tuple<double, typename ExtendedToricCodeQMC<Basis>::SmallIndexVector, typename ExtendedToricCodeQMC<Basis>::SmallEnergyVector> 
@@ -1068,6 +1092,7 @@ ExtendedToricCodeQMC<Basis>::integrated_pot_energy_diff_combination_flip_tuple(
     return {0., SmallIndexVector{}, SmallEnergyVector{}};
 }
 
+/** @brief Commit the event-history changes of an accepted combination update. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::combination_flip(
@@ -1103,6 +1128,7 @@ void ExtendedToricCodeQMC<Basis>::combination_flip(
     } 
 }
 
+/** @brief Propose inserting or removing two single-spin events on one edge. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
@@ -1300,6 +1326,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_single_spin_flip(
     }
 }
 
+/** @brief Propose moving one single-spin event within its neighboring-event window. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
@@ -1686,6 +1713,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_spin_flip_move(
     }
 }
 
+/** @brief Propose reversing one edge's spin over the full imaginary-time period. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_global_single_spin_flip(
@@ -1740,6 +1768,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_single_spin_flip(
     } 
 }
 
+/** @brief Propose reversing every spin of one tuple over the full time period. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_global_tuple_flip(
@@ -1796,6 +1825,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_global_tuple_flip(
 
 }
 
+/** @brief Propose inserting or removing two events on one update tuple. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
@@ -1992,6 +2022,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_double_tuple_flip(
     }
 }
 
+/** @brief Propose moving a tuple event within the common window of its edges. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
@@ -2306,6 +2337,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
     }
 }
 
+/** @brief Propose creating/removing a tuple event and one single event per edge. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
@@ -2653,6 +2685,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
     } 
 }
 
+/** @brief Choose one of the seven proposal types with equal probability. */
 template<char Basis>
 requires ValidBasis<Basis>
 void ExtendedToricCodeQMC<Basis>::metropolis_step(
@@ -2685,6 +2718,7 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step(
 #endif  
 }
 
+/** @brief Estimate tau_int in samples; warn when it exceeds 10% of the series length. */
 template<char Basis>
 requires ValidBasis<Basis>
 double ExtendedToricCodeQMC<Basis>::calculate_autocorrelation_time_with_warning(
@@ -2719,6 +2753,10 @@ double ExtendedToricCodeQMC<Basis>::calculate_autocorrelation_time_with_warning(
     return autocorrelation_time;
 }
 
+/**
+ * @brief This method will run a QMC thermalization of the extended toric code with the specified
+ * parameters and return observables and acceptance ratio diagnostics.
+ */
 template<char Basis>
 requires ValidBasis<Basis>
 Result ExtendedToricCodeQMC<Basis>::get_thermalization(
@@ -2822,6 +2860,10 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
     };                                     
 }
 
+/**
+ * @brief This method will run a QMC simulation of the extended toric code with the specified
+ * parameters and return observables.
+ */
 template<char Basis>
 requires ValidBasis<Basis>
 Result ExtendedToricCodeQMC<Basis>::get_sample(
@@ -3115,6 +3157,10 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
     };                                       
 }
 
+/**
+ * @brief This method will run a QMC hysteresis simulation of the extended toric code with the
+ * specified parameters and return observables.
+ */
 template<char Basis>
 requires ValidBasis<Basis>
 Result ExtendedToricCodeQMC<Basis>::get_hysteresis(

@@ -48,6 +48,7 @@ public:
     /** @brief Control-flow exception used to stop a percolation search early. */
     class FoundPercolation : public std::exception {
         public:
+            /** @brief Return the diagnostic message for a completed percolation search. */
             const char* what() const noexcept override {
                 return "Found percolation";
             }
@@ -84,6 +85,7 @@ public:
         // Cubic edge direction (x, y, or z), used by cube percolation.
         std::string orientation;
 
+        /** @brief Set the edge's direction label, defaulting to x. */
         EdgeData(std::string o = "x") : orientation(o){ }
     };
 
@@ -141,9 +143,12 @@ public:
 
     /** @brief Create an uninitialized placeholder; assign a constructed lattice before use. */
     Lattice() = default; 
+    /** @brief Release lattice storage and clean up any temporary snapshot spool. */
     ~Lattice() = default;
 
+    /** @brief Copy lattice state and share its RNG; start with an empty snapshot spool. */
     Lattice(Lattice const&) = default;
+    /** @brief Copy lattice state and share its RNG; discard the destination's snapshot spool. */
     Lattice& operator=(Lattice const&) = default;
 
     /** @brief Count edges with spin +1 at the time origin. */
@@ -859,16 +864,25 @@ private:
         std::size_t edge_count = 0;
         std::size_t sample_count = 0;
 
+        /** @brief Create an empty spool without opening a temporary file. */
         SnapshotSpoolState() = default;
+        /** @brief Create an empty spool when copying; recorded snapshots are not copied. */
         SnapshotSpoolState(const SnapshotSpoolState&)
             : path{}, stream{}, edge_count(0), sample_count(0) {}
+        /** @brief Reset this spool without copying the source's file or snapshots. */
         SnapshotSpoolState& operator=(const SnapshotSpoolState&) {
             reset();
             return *this;
         }
+        /** @brief Close the stream and attempt to remove its temporary file. */
         ~SnapshotSpoolState();
 
+        /** @brief Test whether a temporary file path has been assigned to the spool. */
         bool active() const { return !path.empty(); }
+        /**
+         * @brief Close the stream, remove the temporary file, and clear the path and counts.
+         * @note File-removal errors are ignored.
+         */
         void reset();
     };
     SnapshotSpoolState snapshot_spool_;
@@ -908,15 +922,30 @@ private:
         const std::string& boundaries,
         int default_spin
         );
-    // Diagonal tuple products are unchanged by off-diagonal tuple events:
-    // stars and plaquettes overlap on an even number of edges. Only singles
-    // need to be merged when evaluating the basis's diagonal tuple integral.
+    /**
+     * @brief Integrate a bare diagonal tuple product using only single-spin histories.
+     * @pre Tuple events leave this product unchanged, as for stars in x or plaquettes in z.
+     * @note Stars and plaquettes overlap on an even number of edges, so only single
+     *       events need to be merged when evaluating a diagonal tuple integral.
+     * @see integrated_tuple_energy() for interval and return-value conventions.
+     */
     inline double integrated_tuple_energy_single_flips(
         std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
     );
+    /**
+     * @brief Return -2 times the bare diagonal tuple integral for a product reversal.
+     * @see integrated_tuple_energy_single_flips() for history and interval requirements.
+     */
     inline double integrated_tuple_energy_diff_single_flips(
         std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
     );
+    /**
+     * @brief Integrate a combination-update change using full or single-spin histories.
+     * @param single_flips_only True selects single-spin histories; false selects all flips.
+     * @pre When single_flips_only is true, tuple events leave the local product unchanged.
+     * @return Bare tuple-integral change; zero for an empty proposal schedule.
+     * @see integrated_tuple_energy_diff_combination() for schedule parity and cutoff rules.
+     */
     inline double integrated_tuple_energy_diff_combination_from_flips(
         std::span<const Edge> tuple_edges,
         double imag_time_1,
@@ -924,6 +953,14 @@ private:
         const std::vector<std::pair<double, int>>& spin_flip_lookup,
         bool single_flips_only
     );
+    /**
+     * @brief Integrate a bare tuple product by merging the selected edge histories.
+     * @param single_flips_only True selects single-spin histories; false selects all flips.
+     * @pre Use ordered, non-wrapping bounds within [0, beta]. When single_flips_only
+     *      is true, tuple events must leave the product unchanged.
+     * @return Bare integral; zero if imag_time_1 >= imag_time_2.
+     * @note Equal-time flips combine by parity.
+     */
     inline double integrated_tuple_energy_from_flips(
         std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2, bool single_flips_only
     );
@@ -989,6 +1026,7 @@ private:
     }
 };
 
+/** @brief Count edges with spin +1 at the time origin. */
 inline int Lattice::get_non_string_count() {
     int result = 0;
     for (const auto& edg : egde_cache_) {
@@ -997,6 +1035,7 @@ inline int Lattice::get_non_string_count() {
     return result;
 }
 
+/** @brief Count edges with spin -1 at the time origin. */
 inline int Lattice::get_string_count() {
     int result = 0;
     for (const auto& edg : egde_cache_) {
@@ -1005,81 +1044,101 @@ inline int Lattice::get_string_count() {
     return result;
 }
 
+/** @brief Return the number of graph vertices. */
 inline int Lattice::get_vertex_count() {
     return boost::num_vertices(g);
 }
 
+/** @brief Return the number of graph edges. */
 inline int Lattice::get_edge_count() {
     return boost::num_edges(g);
 }
 
+/** @brief Return the number of elementary plaquettes. */
 inline int Lattice::get_plaquette_count() {
     return plaquette_vector.size();
 }
 
+/** @brief Return the number of elementary cubes. */
 inline int Lattice::get_cube_count() {
     return cube_vector.size();
 }
+/** @brief Return the edge spin at the time origin. */
 inline int Lattice::get_spin(const Edge& edg) {
     return g[edg].spin;
 }
 
+/** @brief Read the cached bare edge integral over [0, beta]. */
 inline double Lattice::get_potential_edge_energy(const Edge& edg) {
     return g[edg].integrated_edge_energy;
 }
 
+/** @brief Replace the cached bare edge integral. */
 inline void Lattice::set_potential_edge_energy(const Edge& edg, double potential_energy) {
     g[edg].integrated_edge_energy = potential_energy;
 }
 
+/** @brief Add a bare integral change to the edge cache. */
 inline void Lattice::add_potential_edge_energy(const Edge& edg, double diff) {
     g[edg].integrated_edge_energy += diff;
 }
 
+/** @brief Read the cached bare star integral (maintained in the x-basis). */
 inline double Lattice::get_potential_star_energy(int star_index) {
     return g[star_index].integrated_star_energy;
 }
     
+/** @brief Replace the cached bare star integral. */
 inline void Lattice::set_potential_star_energy(int star_index, double potential_energy) {
     g[star_index].integrated_star_energy = potential_energy;
 }
 
+/** @brief Add a bare integral change to the star cache. */
 inline void Lattice::add_potential_star_energy(int star_index, double diff) {
     g[star_index].integrated_star_energy += diff;
 }
 
+/** @brief Read the cached bare plaquette integral (maintained in the z-basis). */
 inline double Lattice::get_potential_plaquette_energy(int plaquette_index) {
     return integrated_plaquette_energy_vector[plaquette_index];
 }
     
+/** @brief Replace the cached bare plaquette integral. */
 inline void Lattice::set_potential_plaquette_energy(int plaquette_index, double potential_energy) {
     integrated_plaquette_energy_vector[plaquette_index] = potential_energy;
 }
 
+/** @brief Add a bare integral change to the plaquette cache. */
 inline void Lattice::add_potential_plaquette_energy(int plaquette_index, double diff) {
     integrated_plaquette_energy_vector[plaquette_index] += diff;
 }
 
+/** @brief Return the edge's geometry-specific direction label. */
 inline std::string Lattice::get_orientation(const Edge& edg) {
     return g[edg].orientation;
 }
 
+/** @brief Return a time by index in the edge's full flip history. */
 inline double Lattice::get_spin_flip_imag_time(const Edge& edg, int spin_flip_index) {
     return g[edg].spin_flips[spin_flip_index];
 }
 
+/** @brief Overwrite one time in the edge's full history. */
 inline void Lattice::set_spin_flip_imag_time(const Edge& edg, int spin_flip_index, double imag_time) {
     g[edg].spin_flips[spin_flip_index] = imag_time;
 }
 
+/** @brief Overwrite one time in the edge's single-spin history. */
 inline void Lattice::set_single_spin_flip_imag_time(const Edge& edg, int spin_flip_index, double imag_time) {
     g[edg].single_spin_flips[spin_flip_index] = imag_time;
 }
 
+/** @brief Count all single and tuple events in an edge's full history. */
 inline int Lattice::get_spin_flip_count(const Edge& edg) {
     return g[edg].spin_flips.size();
 }
 
+/** @brief Return the edge connecting two vertices. */
 inline Lattice::Edge Lattice::edge_in_between(int v_1, int v_2) {
     const auto edg_full = boost::edge(v_1, v_2, g);
 #ifndef NDEBUG
@@ -1090,20 +1149,24 @@ inline Lattice::Edge Lattice::edge_in_between(int v_1, int v_2) {
     return edg_full.first;
 }
 
+/** @brief Borrow cached plaquette edges in construction order; valid while the geometry lives. */
 inline std::span<const Lattice::Edge> Lattice::get_plaquette_edges(int p_index) {
     const auto& v = plaquette_edges_cache_[static_cast<size_t>(p_index)];
     return {v.data(), v.size()};
 }
 
+/** @brief Borrow cached incident edges at a star center; valid while the geometry lives. */
 inline std::span<const Lattice::Edge> Lattice::get_star_edges(int center_index) {
     const auto& s = star_edges_cache_[static_cast<size_t>(center_index)];
     return {s.data(), s.size()};
 }
 
+/** @brief Test whether two vertices share an edge. */
 inline bool Lattice::exists_edge(int v_1, int v_2) {
     return boost::edge(v_1, v_2, g).second;
 }
 
+/** @brief Return the source and target vertex indices of an edge. */
 inline std::pair<int, int> Lattice::vertices_of_edge(const Edge& edg) {
     const Edge e = edg;
     const auto source_v = boost::source(e, g);
@@ -1111,6 +1174,7 @@ inline std::pair<int, int> Lattice::vertices_of_edge(const Edge& edg) {
     return {source_v, target_v};
 }
 
+/** @brief Two-event overload; event times may be supplied in either order. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_edge_energy_diff_combination(
     const Edge& edg,
@@ -1146,6 +1210,7 @@ inline double Lattice::integrated_edge_energy_diff_combination(
     return -2.0 * integrated_edge_energy(edg, t_start, imag_time_2);
 }
 
+/** @brief Compute a bare edge-integral change on an interval with no inner events. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_edge_energy_diff_no_inner_flips(
     const Edge& edg, double imag_time_1, double imag_time_2,
@@ -1176,6 +1241,7 @@ inline double Lattice::integrated_edge_energy_diff_no_inner_flips(
     return -2.0 * (imag_time_2 - imag_time_1) * spin;
 }
 
+/** @brief Integrate the bare edge change from a sorted proposed flip schedule. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_edge_energy_diff_combination(
     const Edge& edg, 
@@ -1235,6 +1301,7 @@ inline double Lattice::integrated_edge_energy_diff_combination(
     return -2.0 * odd_integral;
 }
 
+/** @brief Integrate one spin without a Hamiltonian minus sign or coupling. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_edge_energy(
     const Edge& edg, double imag_time_1, double imag_time_2
@@ -1273,6 +1340,7 @@ inline double Lattice::integrated_edge_energy(
     return energy;
 }
 
+/** @brief Integrate a tuple-product change from a local combination schedule. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_tuple_energy_diff_combination(
     std::span<const Edge> tuple_edges, 
@@ -1285,6 +1353,7 @@ inline double Lattice::integrated_tuple_energy_diff_combination(
     );
 }
 
+/** @brief Integrate a combination-update change using full or single-spin histories. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_tuple_energy_diff_combination_from_flips(
     std::span<const Edge> tuple_edges,
@@ -1386,6 +1455,7 @@ inline double Lattice::integrated_tuple_energy_diff_combination_from_flips(
     return -2.0 * odd_integral;
 }
 
+/** @brief Integrate the product of tuple spins without a minus sign or coupling. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_tuple_energy(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
@@ -1393,6 +1463,7 @@ inline double Lattice::integrated_tuple_energy(
     return integrated_tuple_energy_from_flips(tuple_edges, imag_time_1, imag_time_2, false);
 }
 
+/** @brief Integrate a bare diagonal tuple product using only single-spin histories. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_tuple_energy_single_flips(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
@@ -1400,6 +1471,7 @@ inline double Lattice::integrated_tuple_energy_single_flips(
     return integrated_tuple_energy_from_flips(tuple_edges, imag_time_1, imag_time_2, true);
 }
 
+/** @brief Return -2 times the bare diagonal tuple integral for a product reversal. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_tuple_energy_diff_single_flips(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2
@@ -1407,6 +1479,7 @@ inline double Lattice::integrated_tuple_energy_diff_single_flips(
     return -2.0 * integrated_tuple_energy_single_flips(tuple_edges, imag_time_1, imag_time_2);
 }
 
+/** @brief Integrate a bare tuple product by merging the selected edge histories. */
 [[gnu::hot, gnu::always_inline]]
 inline double Lattice::integrated_tuple_energy_from_flips(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2, bool single_flips_only
