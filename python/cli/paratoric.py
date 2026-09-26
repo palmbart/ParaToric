@@ -1,5 +1,6 @@
 # ParaToric - Continuous-time QMC for the extended toric code in the x/z-basis
 # Copyright (C) 2022-2026  Simon Mathias Linsel, Lode Pollet
+# pyright: strict
 
 """Parse sweep options and dispatch jobs to the C++ CLI through JobHandler."""
 
@@ -8,6 +9,53 @@ import logging
 from math import pi
 import multiprocessing
 import sys
+from typing import TypedDict, cast
+
+
+class CLIArguments(TypedDict):
+    """Parsed options after the integer switches have been converted to bool."""
+
+    lattice_type: str
+    system_size: int
+    boundaries: str
+    default_spin: int
+    simulation: str
+    N_samples: int
+    N_thermalization: int
+    N_between_samples: int
+    repetitions: int
+    temperature: float
+    T_lower: float
+    T_upper: float
+    T_steps: int
+    mu_constant: float
+    J_constant: float
+    h_constant: float
+    h_hysteresis: list[float]
+    h_constant_therm: float
+    h_lower: float
+    h_upper: float
+    h_steps: int
+    lmbda_constant: float
+    lmbda_hysteresis: list[float]
+    lmbda_constant_therm: float
+    lmbda_lower: float
+    lmbda_upper: float
+    lmbda_steps: int
+    radius: float
+    Theta_lower: float
+    Theta_upper: float
+    Theta_steps: int
+    N_resamples: int
+    custom_therm: bool
+    observables: list[str]
+    seed: int
+    basis: str
+    output_directory: str | None
+    snapshots: bool
+    full_time_series: bool
+    processes: int
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -23,86 +71,60 @@ if not logger.handlers:
     logger.addHandler(console)
 
 
-def cap_processes(args, limit):
+def cap_processes(args: CLIArguments, limit: int) -> None:
     """Cap the resolved worker count to the number of jobs, updating args."""
     args['processes'] = min(args['processes'], limit)
 
 
-def main(args):
+def main(args: CLIArguments) -> None:
     """Dispatch parsed CLI settings; geometry keywords are shared by every job."""
     from job_handler import JobHandler
 
-    lattice_params_list = ('lattice_type',
-                           'system_size',
-                           'boundaries',
-                           'default_spin')
-
-    lattice_params = {k: args[k] for k in lattice_params_list}
+    lattice_params: dict[str, str | int] = {
+        'lattice_type': args['lattice_type'],
+        'system_size': args['system_size'],
+        'boundaries': args['boundaries'],
+        'default_spin': args['default_spin'],
+    }
 
     if args['simulation'] == 'etc_T_sweep':
         cap_processes(args, args['T_steps'])
         job_handler = JobHandler()
         job_handler.etc_T_sweep(N_samples=args['N_samples'],
-                                   N_thermalization=args['N_thermalization'],
-                                   N_between_samples=args['N_between_samples'],
-                                   T_lower=args['T_lower'],
-                                   T_upper=args['T_upper'],
-                                   T_steps=args['T_steps'],
-                                   mu=args['mu_constant'],
-                                   h=args['h_constant'],
-                                   h_therm=args['h_constant_therm'],
-                                   J=args['J_constant'],
-                                   lmbda=args['lmbda_constant'],
-                                   lmbda_therm=args['lmbda_constant_therm'],
-                                   N_resamples=args['N_resamples'],
-                                   custom_therm=args['custom_therm'],
-                                   observables=args['observables'],
-                                   seed=args['seed'],
-                                   basis=args['basis'],
-                                   save_snapshots=args['snapshots'],
-                                   full_time_series=args['full_time_series'],
-                                   processes=args['processes'],
-                                   output_dir=args['output_directory'],
-                                   **lattice_params)
+                                N_thermalization=args['N_thermalization'],
+                                N_between_samples=args['N_between_samples'],
+                                T_lower=args['T_lower'],
+                                T_upper=args['T_upper'],
+                                T_steps=args['T_steps'],
+                                mu=args['mu_constant'],
+                                h=args['h_constant'],
+                                h_therm=args['h_constant_therm'],
+                                J=args['J_constant'],
+                                lmbda=args['lmbda_constant'],
+                                lmbda_therm=args['lmbda_constant_therm'],
+                                N_resamples=args['N_resamples'],
+                                custom_therm=args['custom_therm'],
+                                observables=args['observables'],
+                                seed=args['seed'],
+                                basis=args['basis'],
+                                save_snapshots=args['snapshots'],
+                                full_time_series=args['full_time_series'],
+                                processes=args['processes'],
+                                output_dir=args['output_directory'],
+                                **lattice_params)
         
     elif args['simulation'] == 'etc_hysteresis':
         cap_processes(args, 2)
         job_handler = JobHandler()
         job_handler.etc_hysteresis(N_samples=args['N_samples'],
-                                      N_thermalization=args['N_thermalization'],
-                                      N_between_samples=args['N_between_samples'],
-                                      temperature=args['temperature'],
-                                      mu=args['mu_constant'],
-                                      h_hys=args['h_hysteresis'],
-                                      J=args['J_constant'],
-                                      lmbda_hys=args['lmbda_hysteresis'],
-                                      N_resamples=args['N_resamples'],
-                                      observables=args['observables'],
-                                      seed=args['seed'],
-                                      basis=args['basis'],
-                                      save_snapshots=args['snapshots'],
-                                      full_time_series=args['full_time_series'],
-                                      processes=args['processes'],
-                                      output_dir=args['output_directory'],
-                                      **lattice_params)
-
-    elif args['simulation'] == 'etc_h_sweep':
-        cap_processes(args, args['h_steps'])
-        job_handler = JobHandler()
-        job_handler.etc_h_sweep(N_samples=args['N_samples'],
                                    N_thermalization=args['N_thermalization'],
                                    N_between_samples=args['N_between_samples'],
                                    temperature=args['temperature'],
                                    mu=args['mu_constant'],
-                                   h_lower=args['h_lower'],
-                                   h_upper=args['h_upper'],
-                                   h_steps=args['h_steps'],
-                                   h_therm=args['h_constant_therm'],
+                                   h_hys=args['h_hysteresis'],
                                    J=args['J_constant'],
-                                   lmbda=args['lmbda_constant'],
-                                   lmbda_therm=args['lmbda_constant_therm'],
+                                   lmbda_hys=args['lmbda_hysteresis'],
                                    N_resamples=args['N_resamples'],
-                                   custom_therm=args['custom_therm'],
                                    observables=args['observables'],
                                    seed=args['seed'],
                                    basis=args['basis'],
@@ -112,75 +134,101 @@ def main(args):
                                    output_dir=args['output_directory'],
                                    **lattice_params)
 
+    elif args['simulation'] == 'etc_h_sweep':
+        cap_processes(args, args['h_steps'])
+        job_handler = JobHandler()
+        job_handler.etc_h_sweep(N_samples=args['N_samples'],
+                                N_thermalization=args['N_thermalization'],
+                                N_between_samples=args['N_between_samples'],
+                                temperature=args['temperature'],
+                                mu=args['mu_constant'],
+                                h_lower=args['h_lower'],
+                                h_upper=args['h_upper'],
+                                h_steps=args['h_steps'],
+                                h_therm=args['h_constant_therm'],
+                                J=args['J_constant'],
+                                lmbda=args['lmbda_constant'],
+                                lmbda_therm=args['lmbda_constant_therm'],
+                                N_resamples=args['N_resamples'],
+                                custom_therm=args['custom_therm'],
+                                observables=args['observables'],
+                                seed=args['seed'],
+                                basis=args['basis'],
+                                save_snapshots=args['snapshots'],
+                                full_time_series=args['full_time_series'],
+                                processes=args['processes'],
+                                output_dir=args['output_directory'],
+                                **lattice_params)
+
     elif args['simulation'] == 'etc_lmbda_sweep':
         cap_processes(args, args['lmbda_steps'])
         job_handler = JobHandler()
         job_handler.etc_lmbda_sweep(N_samples=args['N_samples'],
-                                       N_thermalization=args['N_thermalization'],
-                                       N_between_samples=args['N_between_samples'],
-                                       temperature=args['temperature'],
-                                       mu=args['mu_constant'],
-                                       h=args['h_constant'],
-                                       h_therm=args['h_constant_therm'],
-                                       J=args['J_constant'],
-                                       lmbda_lower=args['lmbda_lower'],
-                                       lmbda_upper=args['lmbda_upper'],
-                                       lmbda_steps=args['lmbda_steps'],
-                                       lmbda_therm=args['lmbda_constant_therm'],
-                                       N_resamples=args['N_resamples'],
-                                       custom_therm=args['custom_therm'],
-                                       observables=args['observables'],
-                                       seed=args['seed'],
-                                       basis=args['basis'],
-                                       save_snapshots=args['snapshots'],
-                                       full_time_series=args['full_time_series'],
-                                       processes=args['processes'],
-                                       output_dir=args['output_directory'],
-                                       **lattice_params)
-        
+                                    N_thermalization=args['N_thermalization'],
+                                    N_between_samples=args['N_between_samples'],
+                                    temperature=args['temperature'],
+                                    mu=args['mu_constant'],
+                                    h=args['h_constant'],
+                                    h_therm=args['h_constant_therm'],
+                                    J=args['J_constant'],
+                                    lmbda_lower=args['lmbda_lower'],
+                                    lmbda_upper=args['lmbda_upper'],
+                                    lmbda_steps=args['lmbda_steps'],
+                                    lmbda_therm=args['lmbda_constant_therm'],
+                                    N_resamples=args['N_resamples'],
+                                    custom_therm=args['custom_therm'],
+                                    observables=args['observables'],
+                                    seed=args['seed'],
+                                    basis=args['basis'],
+                                    save_snapshots=args['snapshots'],
+                                    full_time_series=args['full_time_series'],
+                                    processes=args['processes'],
+                                    output_dir=args['output_directory'],
+                                    **lattice_params)
+
     elif args['simulation'] == 'etc_circle_sweep':
         cap_processes(args, args['Theta_steps'])
         job_handler = JobHandler()
         job_handler.etc_circle_sweep(N_samples=args['N_samples'],
-                                        N_thermalization=args['N_thermalization'],
-                                        N_between_samples=args['N_between_samples'],
-                                        temperature=args['temperature'],
-                                        mu=args['mu_constant'],
-                                        h=args['h_constant'],
-                                        J=args['J_constant'],
-                                        lmbda=args['lmbda_constant'],
-                                        radius=args['radius'],
-                                        Theta_lower=args['Theta_lower'],
-                                        Theta_upper=args['Theta_upper'],
-                                        Theta_steps=args['Theta_steps'],
-                                        N_resamples=args['N_resamples'],
-                                        observables=args['observables'],
-                                        seed=args['seed'],
-                                        basis=args['basis'],
-                                        save_snapshots=args['snapshots'],
-                                        full_time_series=args['full_time_series'],
-                                        processes=args['processes'],
-                                        output_dir=args['output_directory'],
-                                        **lattice_params)
+                                     N_thermalization=args['N_thermalization'],
+                                     N_between_samples=args['N_between_samples'],
+                                     temperature=args['temperature'],
+                                     mu=args['mu_constant'],
+                                     h=args['h_constant'],
+                                     J=args['J_constant'],
+                                     lmbda=args['lmbda_constant'],
+                                     radius=args['radius'],
+                                     Theta_lower=args['Theta_lower'],
+                                     Theta_upper=args['Theta_upper'],
+                                     Theta_steps=args['Theta_steps'],
+                                     N_resamples=args['N_resamples'],
+                                     observables=args['observables'],
+                                     seed=args['seed'],
+                                     basis=args['basis'],
+                                     save_snapshots=args['snapshots'],
+                                     full_time_series=args['full_time_series'],
+                                     processes=args['processes'],
+                                     output_dir=args['output_directory'],
+                                     **lattice_params)
 
     elif args['simulation'] == 'etc_thermalization':
         cap_processes(args, args['repetitions'])
         job_handler = JobHandler()
         job_handler.etc_thermalization(N_thermalization=args['N_thermalization'],
-                                          repetitions=args['repetitions'],
-                                          temperature=args['temperature'],
-                                          mu=args['mu_constant'],
-                                          h=args['h_constant'],
-                                          J=args['J_constant'],
-                                          lmbda=args['lmbda_constant'],
-                                          N_resamples=args['N_resamples'],
-                                          observables=args['observables'],
-                                          seed=args['seed'],
-                                          basis=args['basis'],
-                                          save_snapshots=args['snapshots'],
-                                          processes=args['processes'],
-                                          output_dir=args['output_directory'],
-                                          **lattice_params)
+                                       repetitions=args['repetitions'],
+                                       temperature=args['temperature'],
+                                       mu=args['mu_constant'],
+                                       h=args['h_constant'],
+                                       J=args['J_constant'],
+                                       lmbda=args['lmbda_constant'],
+                                       N_resamples=args['N_resamples'],
+                                       observables=args['observables'],
+                                       seed=args['seed'],
+                                       basis=args['basis'],
+                                       save_snapshots=args['snapshots'],
+                                       processes=args['processes'],
+                                       output_dir=args['output_directory'],
+                                       **lattice_params)
     
     else:
         raise ValueError(f'The simulation "{args["simulation"]}" does not exist.')
@@ -339,11 +387,14 @@ if __name__ == '__main__':
                                help='Default spin (electric field) for lattice initialization.',
                                type=int, default=1, choices=[-1, 1])
 
-    args = vars(parser.parse_args())
+    parsed_args = parser.parse_args()
 
-    args['custom_therm'] = bool(args['custom_therm'])
-    args['snapshots'] = bool(args['snapshots'])
-    args['full_time_series'] = bool(args['full_time_series'])
+    parsed_args.custom_therm = bool(parsed_args.custom_therm)
+    parsed_args.snapshots = bool(parsed_args.snapshots)
+    parsed_args.full_time_series = bool(parsed_args.full_time_series)
+
+    # argparse validates the values but exposes an untyped Namespace.
+    args = cast(CLIArguments, vars(parsed_args))
 
     logical_cpu_core_count = multiprocessing.cpu_count()
 

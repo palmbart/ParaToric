@@ -1,24 +1,83 @@
 # ParaToric - Continuous-time QMC for the extended toric code in the x/z-basis
 # Copyright (C) 2022-2026  Simon Mathias Linsel, Lode Pollet
+# pyright: strict
 
 """Run C++ CLI jobs, collect HDF5 output, and plot parameter sweeps."""
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from datetime import timedelta
-import h5py
+import h5py  # pyright: ignore[reportMissingTypeStubs]
 import logging
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import multiprocessing as mp
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
 import os
 from pathlib import Path
 import subprocess
 import sys
 import time
 import traceback
+from typing import Literal, Protocol, TypeAlias, TypedDict, cast
 import uuid
+
+
+FloatArray: TypeAlias = NDArray[np.float64]
+ComplexArray: TypeAlias = NDArray[np.complex128]
+FieldValues: TypeAlias = Sequence[float] | FloatArray
+Statistics: TypeAlias = tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]
+
+
+class ObservableOutput(Protocol):
+    def __call__(self, obs: str, path: str | Path, simulation: str,
+                 hdf5_dict: dict[str, FloatArray], variable: FieldValues,
+                 obs_array: FloatArray, obs_array_error: FloatArray,
+                 obs_binder: FloatArray, obs_binder_error: FloatArray,
+                 obs_tau_int: FloatArray, temperature: float, h: float,
+                 mu: float, J: float, lmbda: float, radius: float,
+                 comment: str = '') -> None: ...
+
+
+class ObservableMetadata(TypedDict):
+    name: str
+    type: Literal['real', 'complex', 'susceptibility']
+    output_str: str
+    output_func: ObservableOutput
+
+
+# Matplotlib leaves style **kwargs untyped. Keep the corresponding diagnostics
+# at these typed plotting boundaries so callers still get strict checking.
+def _set_inward_ticks(ax: Axes) -> None:
+    ax.xaxis.set_tick_params(direction='in', which='both')  # pyright: ignore[reportUnknownMemberType]
+    ax.yaxis.set_tick_params(direction='in', which='both')  # pyright: ignore[reportUnknownMemberType]
+
+
+def _plot_line(ax: Axes, x: FloatArray, y: FloatArray, fmt: str = '', *, color: str) -> None:
+    ax.plot(x, y, fmt, color=color)  # pyright: ignore[reportUnknownMemberType]
+
+
+def _plot_errorbar(ax: Axes, x: FloatArray, y: FloatArray, *, yerr: FloatArray,
+                  fmt: str, color: str, capsize: float) -> None:
+    ax.errorbar(x, y, yerr=yerr, fmt=fmt, color=color, capsize=capsize)  # pyright: ignore[reportUnknownMemberType]
+
+
+def _add_grid(ax: Axes) -> None:
+    ax.grid(color='silver', linestyle='-', alpha=0.3)  # pyright: ignore[reportUnknownMemberType]
+
+
+def _save_figure(fig: Figure, path: str | Path) -> None:
+    fig.tight_layout()
+    fig.savefig(path)  # pyright: ignore[reportUnknownMemberType]
+    plt.close(fig)
+
+
+def _set_figure_title(fig: Figure, title: str) -> None:
+    fig.suptitle(title)  # pyright: ignore[reportUnknownMemberType]
 
 
 class JobHandler:
@@ -30,13 +89,13 @@ class JobHandler:
     default_spin keyword arguments; a Monte Carlo step is one update proposal.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.obs_func_list = None
 
         self.__set_up_logging()
 
         # Plot metadata is keyed by the same observable names as the QMC registry.
-        self.obs_dict = [{'name': 'percolation_strength',
+        self.obs_dict: list[ObservableMetadata] = [{'name': 'percolation_strength',
                          'type': 'real',
                          'output_str': 'Percolation strength',
                          'output_func': self._real_output},
@@ -145,9 +204,11 @@ class JobHandler:
                          'type': 'real',
                          'output_str': r'$\langle -J \; \sum_p \; B_p \rangle$',
                          'output_func': self._real_output}]
-        self.obs_by_name = {elem['name']: elem for elem in self.obs_dict}
+        self.obs_by_name: dict[str, ObservableMetadata] = {
+            elem['name']: elem for elem in self.obs_dict
+        }
         
-    def __set_up_logging(self):
+    def __set_up_logging(self) -> None:
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
 
@@ -163,31 +224,31 @@ class JobHandler:
 
         self.log = logger
 
-    def __set_lattice_params(self, **kwargs):
+    def __set_lattice_params(self, **kwargs: str | int) -> None:
         self.lattice_params = kwargs
 
-    def __get_observable_output_str(self, obs: str):
+    def __get_observable_output_str(self, obs: str) -> str:
         elem = self.obs_by_name.get(obs)
         if elem is not None:
             return elem['output_str']
         self.log.info(f"The observable \"{obs}\" has not been found, returning \"{obs}\" as output string!")
         return obs
 
-    def __get_observable_output_func(self, obs: str):
+    def __get_observable_output_func(self, obs: str) -> ObservableOutput:
         elem = self.obs_by_name.get(obs)
         if elem is not None:
             return elem['output_func']
         self.log.info(f"The observable \"{obs}\" has not been found, returning self._real_output as output function!")
         return self._real_output
         
-    def __get_observable_type(self, obs: str):
+    def __get_observable_type(self, obs: str) -> str:
         elem = self.obs_by_name.get(obs)
         if elem is not None:
             return elem['type']
         self.log.info(f"The observable \"{obs}\" has not been found, returning \"real\" as output function!")
         return 'real'
 
-    def __warn_invalid_plot_data(self, context: str, **datasets):
+    def __warn_invalid_plot_data(self, context: str, **datasets: ArrayLike) -> None:
         """Log empty or nonfinite plot inputs without changing the data."""
         for name, values in datasets.items():
             array = np.asarray(values)
@@ -206,36 +267,36 @@ class JobHandler:
                     context, name, nan_count, inf_count
                 )
 
-    def __dictionary_output(self, dictionary: dict):
+    def __dictionary_output(self, dictionary: Mapping[str, object]) -> str:
         return ''.join(f"{key}: {value}\n" for key, value in dictionary.items())
 
-    def __construct_output_directory(self, output_dir: str | None, name: str, begin_time: str, subpathname: str):
+    def __construct_output_directory(self, output_dir: str | Path | None, name: str, begin_time: str, subpathname: str) -> Path:
         """Create a unique run directory beneath output_dir (default: out)."""
         base_dir = Path(output_dir or 'out')
         outname = f"{name}_{begin_time}_{uuid.uuid4().hex}"
         out_path = base_dir / subpathname / outname
         out_path.mkdir(parents=True)
-        return str(out_path)
+        return out_path
 
-    def __get_datetime(self):
+    def __get_datetime(self) -> str:
         return datetime.now().strftime('%d_%m_%Y-%H_%M_%S')
 
-    def __paratoric_executable(self):
+    def __paratoric_executable(self) -> Path:
         """Locate the repository's installed bin/paratoric executable."""
         return Path(__file__).resolve().parents[2] / 'bin' / 'paratoric'
 
-    def __run_paratoric(self, args: list):
+    def __run_paratoric(self, args: Sequence[str | int | float | np.float64 | Path]) -> None:
         """Run one synchronous CLI job; propagate a nonzero exit as CalledProcessError."""
         command = [str(self.__paratoric_executable()), *map(str, args)]
         subprocess.run(command, check=True)
 
-    def __write_hdf5_file(self, datasets: dict, path: str, filename: str = 'simulation_data.h5'):
+    def __write_hdf5_file(self, datasets: Mapping[str, FloatArray], path: str | Path, filename: str = 'simulation_data.h5') -> None:
         """Replace the aggregate HDF5 file with gzip-compressed datasets."""
         with h5py.File(Path(path) / filename, 'w') as hf:
             for key, value in datasets.items():
-                hf.create_dataset(key, data=value, compression='gzip')
+                hf.create_dataset(key, data=value, compression='gzip')  # pyright: ignore[reportUnknownMemberType]
 
-    def __write_parameters_file(self, path: str, run_time: timedelta, begin_time: str, end_time: str, lattice_kwargs: dict, mc_kwargs):
+    def __write_parameters_file(self, path: str | Path, run_time: timedelta, begin_time: str, end_time: str, lattice_kwargs: Mapping[str, object], mc_kwargs: Mapping[str, object]) -> None:
         with (Path(path) / 'parameters.txt').open('w') as text_file:
             print(
                 f"The simulation parameters can be found here."
@@ -245,26 +306,31 @@ class JobHandler:
                 f"\n\nLattice parameters:\n{self.__dictionary_output(lattice_kwargs)}"
                 f"\nMonte Carlo parameters:\n{self.__dictionary_output(mc_kwargs)}",
                 file=text_file)
+
+    @staticmethod
+    def __read_statistic(group: h5py.Group, name: str) -> float:
+        """Read a real scalar from the native CLI's summary dataset schema."""
+        dataset = cast(h5py.Dataset, group[name])
+        return float(cast(np.float64, dataset[()]))
             
     def _get_thermalization_cpp(self,
-                                 verbose: int,
-                                 N_thermalization: int,
-                                 beta: float,
-                                 mu: float,
-                                 h: float,
-                                 J: float,
-                                 lmbda: float,
-                                 N_resamples: int,
-                                 output_dir : str,
-                                 obs: list,
-                                 seed: int,
-                                 basis: str = 'x',
-                                 save_snapshots: bool = False,
-                                 process_index: int = 0):
+                                N_thermalization: int,
+                                beta: float,
+                                mu: float,
+                                h: float,
+                                J: float,
+                                lmbda: float,
+                                N_resamples: int,
+                                output_dir: str | Path,
+                                obs: Sequence[str],
+                                seed: int,
+                                basis: str = 'x',
+                                save_snapshots: bool = False,
+                                process_index: int = 0) -> tuple[list[int], ComplexArray, FloatArray]:
         """Run one thermalization job and load its diagnostics.
 
         Returns (proposal_indices, series, acceptance_ratios), with series
-        indexed [observable][proposal]. verbose is retained for worker-call compatibility.
+        indexed [observable][proposal].
         """
         lattice_type = self.lattice_params['lattice_type']
         system_size = self.lattice_params['system_size']
@@ -295,24 +361,30 @@ class JobHandler:
             '--process_index', process_index,
         ])
 
-        result = []
+        result_series: list[ComplexArray] = []
         with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
             # Raw acceptance ratios use float64; observable series use complex128.
-            acc_ratio = np.asarray(f['simulation/results/acc_ratio'][()])
+            acc_ratio_dataset = cast(
+                h5py.Dataset, f['simulation/results/acc_ratio']
+            )
+            acc_ratio = np.asarray(cast(ArrayLike, acc_ratio_dataset[()]), dtype=np.float64)
             
             for obs_name in obs:
                 if self.__get_observable_type(obs_name) in ['real', 'complex', 'susceptibility']:
-                    series = f[f"simulation/results/{obs_name}/series"][()]
-                    result.append(np.asarray(series, dtype=np.complex128))
+                    series_dataset: h5py.Dataset = cast(
+                        h5py.Dataset,
+                        f[f"simulation/results/{obs_name}/series"],
+                    )
+                    series = cast(ArrayLike, series_dataset[()])
+                    result_series.append(np.asarray(series, dtype=np.complex128))
 
-        result = np.array(result, dtype=np.complex128)
+        result = np.array(result_series, dtype=np.complex128)
 
         sample_numbers = list(range(acc_ratio.size))
         
         return sample_numbers, result, acc_ratio    
 
     def _get_sample_cpp(self,
-                        verbose: int,
                         N_samples: int,
                         N_thermalization: int,
                         N_between_samples: int,
@@ -325,13 +397,13 @@ class JobHandler:
                         lmbda_therm: float,
                         N_resamples: int,
                         custom_therm: bool,
-                        output_dir : str,
-                        obs: list,
+                        output_dir: str | Path,
+                        obs: Sequence[str],
                         seed: int,
                         basis: str = 'x',
                         save_snapshots: bool = False,
                         full_time_series: bool = False,
-                        process_index: int = 0):
+                        process_index: int = 0) -> Statistics:
         """Run one sampling job and read its scalar statistics.
 
         Returns (mean, mean_error, binder, binder_error, tau_int), each ordered by
@@ -373,21 +445,21 @@ class JobHandler:
             '--process_index', process_index,
         ])
 
-        mean_list = []
-        mean_error_list = []
-        binder_list = []
-        binder_error_list = []
-        autocorrelation_time_list = []
+        mean_list: list[float] = []
+        mean_error_list: list[float] = []
+        binder_list: list[float] = []
+        binder_error_list: list[float] = []
+        autocorrelation_time_list: list[float] = []
         with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
             for obs_name in obs:
                 if self.__get_observable_type(obs_name) in ['real', 'complex', 'susceptibility']:
-                    base = f[f"simulation/results/{obs_name}"]
+                    base = cast(h5py.Group, f[f"simulation/results/{obs_name}"])
 
-                    mean = base['mean'][()]      
-                    mean_error = base['mean_error'][()]
-                    binder = base['binder'][()]
-                    binder_error = base['binder_error'][()]
-                    autocorrelation_time = base['autocorrelation_time'][()]
+                    mean = self.__read_statistic(base, 'mean')
+                    mean_error = self.__read_statistic(base, 'mean_error')
+                    binder = self.__read_statistic(base, 'binder')
+                    binder_error = self.__read_statistic(base, 'binder_error')
+                    autocorrelation_time = self.__read_statistic(base, 'autocorrelation_time')
 
                     mean_list.append(mean)
                     mean_error_list.append(mean_error)
@@ -395,32 +467,31 @@ class JobHandler:
                     binder_error_list.append(binder_error)
                     autocorrelation_time_list.append(autocorrelation_time)
         
-        mean_list = np.array(mean_list, dtype=np.float64)
-        mean_error_list = np.array(mean_error_list, dtype=np.float64)
-        binder_list = np.array(binder_list, dtype=np.float64)
-        binder_error_list = np.array(binder_error_list, dtype=np.float64)
-        autocorrelation_time_list = np.array(autocorrelation_time_list, dtype=np.float64)
+        mean_array = np.array(mean_list, dtype=np.float64)
+        mean_error_array = np.array(mean_error_list, dtype=np.float64)
+        binder_array = np.array(binder_list, dtype=np.float64)
+        binder_error_array = np.array(binder_error_list, dtype=np.float64)
+        autocorrelation_time_array = np.array(autocorrelation_time_list, dtype=np.float64)
         
-        return mean_list, mean_error_list, binder_list, binder_error_list, autocorrelation_time_list
+        return mean_array, mean_error_array, binder_array, binder_error_array, autocorrelation_time_array
     
     def _get_hysteresis_cpp(self,
-                            verbose: int,
                             N_samples: int,
                             N_thermalization: int,
                             N_between_samples: int,
                             beta: float,
                             mu: float,
-                            h_hys: float,
+                            h_hys: FieldValues,
                             J: float,
-                            lmbda_hys: float,
+                            lmbda_hys: FieldValues,
                             N_resamples: int,
-                            output_dir : str,
-                            obs: list,
+                            output_dir: str | Path,
+                            obs: Sequence[str],
                             seed: int,
                             basis: str = 'x',
                             save_snapshots: bool = False,
                             full_time_series: bool = False,
-                            process_index: int = 0):
+                            process_index: int = 0) -> Statistics:
         """Run one schedule branch and load statistics shaped [point][observable].
 
         Returns (mean, mean_error, binder, binder_error, tau_int). h_hys and lmbda_hys
@@ -466,22 +537,22 @@ class JobHandler:
         binder_error_result_array = np.empty(shape=[len(h_hys), len(obs)], dtype=np.float64)
         autocorrelation_time_result_array = np.empty(shape=[len(h_hys), len(obs)], dtype=np.float64)
         for idx, folder_name in enumerate(folder_names):
-            mean_list = []
-            mean_error_list = []
-            binder_list = []
-            binder_error_list = []
-            autocorrelation_time_list = []
+            mean_list: list[float] = []
+            mean_error_list: list[float] = []
+            binder_list: list[float] = []
+            binder_error_list: list[float] = []
+            autocorrelation_time_list: list[float] = []
             
             with h5py.File(Path(output_dir) / folder_name / 'obs.h5', "r") as f:
                 for obs_name in obs:
                     if self.__get_observable_type(obs_name) in ['real', 'complex', 'susceptibility']:
-                        base = f[f"simulation/results/{obs_name}"]
+                        base = cast(h5py.Group, f[f"simulation/results/{obs_name}"])
 
-                        mean = base['mean'][()]      
-                        mean_error = base['mean_error'][()]
-                        binder = base['binder'][()]
-                        binder_error = base['binder_error'][()]
-                        autocorrelation_time = base['autocorrelation_time'][()]
+                        mean = self.__read_statistic(base, 'mean')
+                        mean_error = self.__read_statistic(base, 'mean_error')
+                        binder = self.__read_statistic(base, 'binder')
+                        binder_error = self.__read_statistic(base, 'binder_error')
+                        autocorrelation_time = self.__read_statistic(base, 'autocorrelation_time')
 
                         mean_list.append(mean)
                         mean_error_list.append(mean_error)
@@ -499,24 +570,25 @@ class JobHandler:
 
     def _real_output(self, 
                      obs: str, 
-                     path: str, 
+                     path: str | Path,
                      simulation: str, 
-                     hdf5_dict: dict, 
-                     variable, 
-                     obs_array, 
-                     obs_array_error, 
-                     obs_binder, 
-                     obs_binder_error, 
-                     obs_tau_int,
+                     hdf5_dict: dict[str, FloatArray],
+                     variable: FieldValues,
+                     obs_array: FloatArray,
+                     obs_array_error: FloatArray,
+                     obs_binder: FloatArray,
+                     obs_binder_error: FloatArray,
+                     obs_tau_int: FloatArray,
                      temperature: float, 
                      h: float, 
                      mu: float, 
                      J: float, 
                      lmbda: float, 
                      radius: float, 
-                     comment: str = ''):
+                     comment: str = '') -> None:
 
         """Plot one observable's statistics and add its arrays to hdf5_dict in place."""
+        variable = np.asarray(variable, dtype=np.float64)
         self.__warn_invalid_plot_data(
             f'{simulation}:{obs}',
             x=variable,
@@ -529,111 +601,102 @@ class JobHandler:
         output_str = self.__get_observable_output_str(obs)
 
         fig, ax = plt.subplots()
-        ax.xaxis.set_tick_params(direction='in', which='both')
-        ax.yaxis.set_tick_params(direction='in', which='both')
+        _set_inward_ticks(ax)
         if simulation == 'etc_T_sweep':
             ax.set(title=f"$\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
             ax.set(xlabel=f"$T$")
-            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable, obs_tau_int, 'o-', color='goldenrod')
         elif simulation == 'etc_h_hysteresis':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
             ax.set(xlabel=f"$h$")
-            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable, obs_tau_int, 'o-', color='goldenrod')
         elif simulation == 'etc_lmbda_hysteresis':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
             ax.set(xlabel=f"$\\lambda$")
-            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable, obs_tau_int, 'o-', color='goldenrod')
         elif simulation == 'etc_h_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $\\lambda = {lmbda}$")
             ax.set(xlabel=f"$h$")
-            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable, obs_tau_int, 'o-', color='goldenrod')
         elif simulation == 'etc_lmbda_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$")
             ax.set(xlabel=f"$\\lambda$")
-            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable, obs_tau_int, 'o-', color='goldenrod')
         elif simulation == 'etc_circle_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$, $r = {radius}$")
             ax.set(xlabel=f"$\\theta / \\pi$")
-            ax.plot(variable/np.pi, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable/np.pi, obs_tau_int, 'o-', color='goldenrod')
         else:
-            ax.plot(variable, obs_tau_int, 'o-', color='goldenrod')
+            _plot_line(ax, variable, obs_tau_int, 'o-', color='goldenrod')
        
-        ax.grid(color='silver', linestyle='-', alpha=0.3)
+        _add_grid(ax)
         ax.set(ylabel=output_str + ' int. autocorr. time')
-        fig.tight_layout()
-        fig.savefig(os.path.join(path, f"{simulation}_{obs}_{comment}_int_ac_time.pdf"))
-        plt.close(fig)
+        _save_figure(fig, os.path.join(path, f"{simulation}_{obs}_{comment}_int_ac_time.pdf"))
 
         fig, ax = plt.subplots()
-        ax.xaxis.set_tick_params(direction='in', which='both')
-        ax.yaxis.set_tick_params(direction='in', which='both')
+        _set_inward_ticks(ax)
         if simulation == 'etc_T_sweep':
             ax.set(title=f"$\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
             ax.set(xlabel=f"$T$")
-            ax.errorbar(variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
         elif simulation == 'etc_h_hysteresis':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
             ax.set(xlabel=f"$h$")
-            ax.errorbar(variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
         elif simulation == 'etc_lmbda_hysteresis':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
             ax.set(xlabel=f"$\\lambda$")
-            ax.errorbar(variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
         elif simulation == 'etc_h_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $\\lambda = {lmbda}$")
             ax.set(xlabel=f"$h$")
-            ax.errorbar(variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
         elif simulation == 'etc_lmbda_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$")
             ax.set(xlabel=f"$\\lambda$")
-            ax.errorbar(variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
         elif simulation == 'etc_circle_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$, $r = {radius}$")
             ax.set(xlabel=f"$\\theta / \\pi$")
-            ax.errorbar(variable/np.pi, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable/np.pi, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
         else:
-            ax.errorbar(variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
+            _plot_errorbar(ax, variable, obs_array, yerr=obs_array_error, fmt='o-', color='firebrick', capsize=3)
        
-        ax.grid(color='silver', linestyle='-', alpha=0.3)
+        _add_grid(ax)
         ax.set(ylabel=output_str)
-        fig.tight_layout()
-        fig.savefig(os.path.join(path, f"{simulation}_{obs}_{comment}.pdf"))
-        plt.close(fig)
+        _save_figure(fig, os.path.join(path, f"{simulation}_{obs}_{comment}.pdf"))
 
         fig, ax = plt.subplots()
-        ax.xaxis.set_tick_params(direction='in', which='both')
-        ax.yaxis.set_tick_params(direction='in', which='both')
+        _set_inward_ticks(ax)
         if simulation == 'etc_T_sweep':
             ax.set(title=f"$\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
             ax.set(xlabel=f"$T$")
-            ax.errorbar(variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
         elif simulation == 'etc_h_hysteresis':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
             ax.set(xlabel=f"$h$")
-            ax.errorbar(variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
         elif simulation == 'etc_lmbda_hysteresis':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$")
             ax.set(xlabel=f"$\\lambda$")
-            ax.errorbar(variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
         elif simulation == 'etc_h_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $\\lambda = {lmbda}$")
             ax.set(xlabel=f"$h$")
-            ax.errorbar(variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
         elif simulation == 'etc_lmbda_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$")
             ax.set(xlabel=f"$\\lambda$")
-            ax.errorbar(variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
         elif simulation == 'etc_circle_sweep':
             ax.set(title=f"$T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$, $r = {radius}$")
             ax.set(xlabel=f"$\\theta / \\pi$")
-            ax.errorbar(variable/np.pi, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable/np.pi, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
         else:
-            ax.errorbar(variable/np.pi, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3) 
+            _plot_errorbar(ax, variable/np.pi, obs_binder, yerr=obs_binder_error, fmt='o-', color='seagreen', capsize=3)
 
         ax.set(ylabel=output_str + ' Binder ratio')
-        fig.tight_layout()
-        fig.savefig(os.path.join(path, f"{simulation}_{obs}_{comment}_binder.pdf"))
-        plt.close(fig)
+        _save_figure(fig, os.path.join(path, f"{simulation}_{obs}_{comment}_binder.pdf"))
 
         hdf5_dict[obs + f"_{comment}"] = obs_array.astype(np.float64)
         hdf5_dict[obs + f"_{comment}" + '_binder'] = obs_binder.astype(np.float64)
@@ -642,26 +705,26 @@ class JobHandler:
         hdf5_dict[obs + f"_{comment}" + '_int_ac_time'] = obs_tau_int.astype(np.float64)
 
     def etc_T_sweep(self,
-                       N_samples: int,
-                       N_thermalization: int,
-                       N_between_samples: int,
-                       T_lower: float, T_upper: float, T_steps: int,
-                       mu: float,
-                       h: float,
-                       h_therm: float,
-                       J: float,
-                       lmbda: float,
-                       lmbda_therm: float,
-                       N_resamples: int,
-                       custom_therm: bool,
-                       observables: tuple[str, ...] = ('energy',),
-                       seed: int = 0,
-                       basis: str = 'x',
-                       save_snapshots: bool = False,
-                       full_time_series: bool = False,
-                       processes: int = 8,
-                       output_dir: str = '',
-                       **kwargs):
+                    N_samples: int,
+                    N_thermalization: int,
+                    N_between_samples: int,
+                    T_lower: float, T_upper: float, T_steps: int,
+                    mu: float,
+                    h: float,
+                    h_therm: float,
+                    J: float,
+                    lmbda: float,
+                    lmbda_therm: float,
+                    N_resamples: int,
+                    custom_therm: bool,
+                    observables: Sequence[str] = ('energy',),
+                    seed: int = 0,
+                    basis: str = 'x',
+                    save_snapshots: bool = False,
+                    full_time_series: bool = False,
+                    processes: int = 8,
+                    output_dir: str | Path | None = '',
+                    **kwargs: str | int) -> None:
 
         """Run independent chains at evenly spaced temperatures, then save combined output."""
         begin_time = self.__get_datetime()
@@ -681,12 +744,12 @@ class JobHandler:
 
         if T_steps > 1:
             with mp.Pool(processes=processes) as pool:
-                arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, beta in enumerate(betas)]
+                arguments = [(N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, beta in enumerate(betas)]
                 results = pool.starmap(self._get_sample_cpp, arguments, chunksize=1)
 
             results = np.array(results)
         else:
-            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, 1/T_lower, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
+            results = self._get_sample_cpp(N_samples, N_thermalization, N_between_samples, 1/T_lower, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
 
             results = np.array([results])
 
@@ -715,7 +778,7 @@ class JobHandler:
 
         self.__write_parameters_file(output_dir, run_time, begin_time, end_time, kwargs, sweep_params)
 
-        hdf5_dict = {'temperatures': temperatures.astype(np.float64)}
+        hdf5_dict: dict[str, FloatArray] = {'temperatures': temperatures.astype(np.float64)}
 
         self.log.info('Plotting observables...')
 
@@ -724,7 +787,7 @@ class JobHandler:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_T_sweep', hdf5_dict, temperatures,
                         results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], 0, h, mu, J, lmbda, 0)
-            except Exception as e:
+            except Exception:
                 self.log.info(traceback.format_exc())
             
         self.log.info('Writing HDF5 file...')
@@ -732,23 +795,23 @@ class JobHandler:
         self.__write_hdf5_file(hdf5_dict, output_dir)
 
     def etc_hysteresis(self,
-                          N_samples: int,
-                          N_thermalization: int,
-                          N_between_samples: int,
-                          temperature: float,
-                          mu: float,
-                          h_hys: float,
-                          J: float,
-                          lmbda_hys: float,
-                          N_resamples: int,
-                          observables: tuple[str, ...] = ('energy',),
-                          seed: int = 0,
-                          basis: str = 'x',
-                          save_snapshots: bool = False,
-                          full_time_series: bool = False,
-                          processes: int = 8,
-                          output_dir: str = '',
-                          **kwargs):
+                       N_samples: int,
+                       N_thermalization: int,
+                       N_between_samples: int,
+                       temperature: float,
+                       mu: float,
+                       h_hys: FieldValues,
+                       J: float,
+                       lmbda_hys: FieldValues,
+                       N_resamples: int,
+                       observables: Sequence[str] = ('energy',),
+                       seed: int = 0,
+                       basis: str = 'x',
+                       save_snapshots: bool = False,
+                       full_time_series: bool = False,
+                       processes: int = 8,
+                       output_dir: str | Path | None = '',
+                       **kwargs: str | int) -> None:
 
         """Run separate forward and reversed schedule branches.
 
@@ -769,8 +832,8 @@ class JobHandler:
         output_dir_t = os.path.join(output_dir, 'data')
         os.mkdir(output_dir_t)
         with mp.Pool(processes=processes) as pool:
-            arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, h_hys, J, lmbda_hys, N_resamples, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0),
-                         (0, N_samples, N_thermalization, N_between_samples, beta, mu, h_hys[::-1], J, lmbda_hys[::-1], N_resamples, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 1)]
+            arguments = [(N_samples, N_thermalization, N_between_samples, beta, mu, h_hys, J, lmbda_hys, N_resamples, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0),
+                         (N_samples, N_thermalization, N_between_samples, beta, mu, h_hys[::-1], J, lmbda_hys[::-1], N_resamples, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 1)]
             [results_forward, results_backward] = pool.starmap(self._get_hysteresis_cpp, arguments, chunksize=1)
 
         results_forward = np.array(results_forward)
@@ -784,7 +847,7 @@ class JobHandler:
 
         # Save run metadata, plots, and aggregate measurements.
 
-        def all_equal(iterable):
+        def all_equal(iterable: FieldValues) -> bool:
             values = list(iterable)
             return not values or all(value == values[0] for value in values[1:])
 
@@ -806,7 +869,7 @@ class JobHandler:
 
         self.__write_parameters_file(output_dir, run_time, begin_time, end_time, kwargs, sweep_params)
 
-        hdf5_dict = {'h_hys': np.array(h_hys).astype(np.float64), 'lmbda_hys': np.array(lmbda_hys).astype(np.float64)}
+        hdf5_dict: dict[str, FloatArray] = {'h_hys': np.array(h_hys).astype(np.float64), 'lmbda_hys': np.array(lmbda_hys).astype(np.float64)}
 
         self.log.info('Plotting observables...')
 
@@ -824,7 +887,7 @@ class JobHandler:
                             results_forward[0, :, i], results_forward[1, :, i], results_forward[2, :, i], results_forward[3, :, i], results_forward[4, :, i], temperature, 0, mu, J, lmbda_hys[0], 0, 'forward')
                     obs_func(obs, output_dir, 'etc_h_hysteresis', hdf5_dict, h_hys[::-1],
                             results_backward[0, :, i], results_backward[1, :, i], results_backward[2, :, i], results_backward[3, :, i], results_backward[4, :, i], temperature, 0, mu, J, lmbda_hys[0], 0, 'backward')
-            except Exception as e:
+            except Exception:
                 self.log.info(traceback.format_exc())
             
         self.log.info('Writing HDF5 file...')
@@ -832,26 +895,26 @@ class JobHandler:
         self.__write_hdf5_file(hdf5_dict, output_dir)
 
     def etc_h_sweep(self,
-                       N_samples: int,
-                       N_thermalization: int,
-                       N_between_samples: int,
-                       temperature: float,
-                       mu: float,
-                       h_lower: float, h_upper: float, h_steps: int,
-                       h_therm: float,
-                       J: float,
-                       lmbda: float,
-                       lmbda_therm: float,
-                       N_resamples: int,
-                       custom_therm: bool,
-                       observables: tuple[str, ...] = ('energy',),
-                       seed: int = 0,
-                       basis: str = 'x',
-                       save_snapshots: bool = False,
-                       full_time_series: bool = False,
-                       processes: int = 8,
-                       output_dir: str = '',
-                       **kwargs):
+                    N_samples: int,
+                    N_thermalization: int,
+                    N_between_samples: int,
+                    temperature: float,
+                    mu: float,
+                    h_lower: float, h_upper: float, h_steps: int,
+                    h_therm: float,
+                    J: float,
+                    lmbda: float,
+                    lmbda_therm: float,
+                    N_resamples: int,
+                    custom_therm: bool,
+                    observables: Sequence[str] = ('energy',),
+                    seed: int = 0,
+                    basis: str = 'x',
+                    save_snapshots: bool = False,
+                    full_time_series: bool = False,
+                    processes: int = 8,
+                    output_dir: str | Path | None = '',
+                    **kwargs: str | int) -> None:
 
         """Run independent chains at evenly spaced h values, then save combined output."""
         begin_time = self.__get_datetime()
@@ -871,12 +934,12 @@ class JobHandler:
 
         if h_steps > 1:
             with mp.Pool(processes=processes) as pool:
-                arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, h in enumerate(hs)]
+                arguments = [(N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, h in enumerate(hs)]
                 results = pool.starmap(self._get_sample_cpp, arguments, chunksize=1)
 
             results = np.array(results)
         else:
-            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, beta, mu, h_lower, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
+            results = self._get_sample_cpp(N_samples, N_thermalization, N_between_samples, beta, mu, h_lower, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
 
             results = np.array([results])
 
@@ -905,7 +968,7 @@ class JobHandler:
 
         self.__write_parameters_file(output_dir, run_time, begin_time, end_time, kwargs, sweep_params)
 
-        hdf5_dict = {'hs': hs.astype(np.float64)}
+        hdf5_dict: dict[str, FloatArray] = {'hs': hs.astype(np.float64)}
 
         self.log.info('Plotting observables...')
 
@@ -914,7 +977,7 @@ class JobHandler:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_h_sweep', hdf5_dict, hs,
                         results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], temperature, 0, mu, J, lmbda, 0)
-            except Exception as e:
+            except Exception:
                 self.log.info(traceback.format_exc())
             
         self.log.info('Writing HDF5 file...')
@@ -922,26 +985,26 @@ class JobHandler:
         self.__write_hdf5_file(hdf5_dict, output_dir)
 
     def etc_lmbda_sweep(self,
-                           N_samples: int,
-                           N_thermalization: int,
-                           N_between_samples: int,
-                           temperature: float,
-                           mu: float,
-                           h: float,
-                           h_therm: float,
-                           J: float,
-                           lmbda_lower: float, lmbda_upper: float, lmbda_steps: int,
-                           lmbda_therm: float,
-                           N_resamples: int,
-                           custom_therm: bool,
-                           observables: tuple[str, ...] = ('energy',),
-                           seed: int = 0,
-                           basis: str = 'x',
-                           save_snapshots: bool = False,
-                           full_time_series: bool = False,
-                           processes: int = 8,
-                           output_dir: str = '',
-                           **kwargs):
+                        N_samples: int,
+                        N_thermalization: int,
+                        N_between_samples: int,
+                        temperature: float,
+                        mu: float,
+                        h: float,
+                        h_therm: float,
+                        J: float,
+                        lmbda_lower: float, lmbda_upper: float, lmbda_steps: int,
+                        lmbda_therm: float,
+                        N_resamples: int,
+                        custom_therm: bool,
+                        observables: Sequence[str] = ('energy',),
+                        seed: int = 0,
+                        basis: str = 'x',
+                        save_snapshots: bool = False,
+                        full_time_series: bool = False,
+                        processes: int = 8,
+                        output_dir: str | Path | None = '',
+                        **kwargs: str | int) -> None:
 
         """Run independent chains at evenly spaced lmbda values, then save combined output."""
         begin_time = self.__get_datetime()
@@ -961,12 +1024,12 @@ class JobHandler:
 
         if lmbda_steps > 1:
             with mp.Pool(processes=processes) as pool:
-                arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, lmbda in enumerate(lmbdas)]
+                arguments = [(N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, lmbda in enumerate(lmbdas)]
                 results = pool.starmap(self._get_sample_cpp, arguments, chunksize=1)
 
             results = np.array(results)
         else:
-            results = self._get_sample_cpp(0, N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda_lower, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
+            results = self._get_sample_cpp(N_samples, N_thermalization, N_between_samples, beta, mu, h, h_therm, J, lmbda_lower, lmbda_therm, N_resamples, custom_therm, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, 0)
 
             results = np.array([results])
 
@@ -995,7 +1058,7 @@ class JobHandler:
 
         self.__write_parameters_file(output_dir, run_time, begin_time, end_time, kwargs, sweep_params)
 
-        hdf5_dict = {'lmbdas': lmbdas.astype(np.float64)}
+        hdf5_dict: dict[str, FloatArray] = {'lmbdas': lmbdas.astype(np.float64)}
 
         self.log.info('Plotting observables...')
 
@@ -1004,7 +1067,7 @@ class JobHandler:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_lmbda_sweep', hdf5_dict, lmbdas,
                         results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], temperature, h, mu, J, 0, 0)
-            except Exception as e:
+            except Exception:
                 self.log.info(traceback.format_exc())
             
         self.log.info('Writing HDF5 file...')
@@ -1012,25 +1075,25 @@ class JobHandler:
         self.__write_hdf5_file(hdf5_dict, output_dir)
 
     def etc_circle_sweep(self,
-                            N_samples: int,
-                            N_thermalization: int,
-                            N_between_samples: int,
-                            temperature: float,
-                            mu: float,
-                            h: float,
-                            J: float,
-                            lmbda: float,
-                            radius: float,
-                            Theta_lower: float, Theta_upper: float, Theta_steps: int,
-                            N_resamples: int,
-                            observables: tuple[str, ...] = ('energy',),
-                            seed: int = 0,
-                            basis: str = 'x',
-                            save_snapshots: bool = False,
-                            full_time_series: bool = False,
-                            processes: int = 8,
-                            output_dir: str = '',
-                            **kwargs):
+                         N_samples: int,
+                         N_thermalization: int,
+                         N_between_samples: int,
+                         temperature: float,
+                         mu: float,
+                         h: float,
+                         J: float,
+                         lmbda: float,
+                         radius: float,
+                         Theta_lower: float, Theta_upper: float, Theta_steps: int,
+                         N_resamples: int,
+                         observables: Sequence[str] = ('energy',),
+                         seed: int = 0,
+                         basis: str = 'x',
+                         save_snapshots: bool = False,
+                         full_time_series: bool = False,
+                         processes: int = 8,
+                         output_dir: str | Path | None = '',
+                         **kwargs: str | int) -> None:
 
         """Run independent chains around a circle in (lmbda, h) space.
 
@@ -1055,7 +1118,7 @@ class JobHandler:
         output_dir_t = os.path.join(output_dir, 'data')
         os.mkdir(output_dir_t)
         with mp.Pool(processes=processes) as pool:
-            arguments = [(0, N_samples, N_thermalization, N_between_samples, beta, mu, loc_h, loc_h, J, loc_lmbda, loc_lmbda, N_resamples, False, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, (loc_lmbda, loc_h) in enumerate(lambda_h_pair_array)]
+            arguments = [(N_samples, N_thermalization, N_between_samples, beta, mu, loc_h, loc_h, J, loc_lmbda, loc_lmbda, N_resamples, False, output_dir_t, observables, seed, basis, save_snapshots, full_time_series, i) for i, (loc_lmbda, loc_h) in enumerate(lambda_h_pair_array)]
             results = pool.starmap(self._get_sample_cpp, arguments, chunksize=1)
 
         results = np.array(results)
@@ -1087,7 +1150,7 @@ class JobHandler:
 
         self.__write_parameters_file(output_dir, run_time, begin_time, end_time, kwargs, sweep_params)
 
-        hdf5_dict = {'angles_array': angles_array.astype(np.float64),
+        hdf5_dict: dict[str, FloatArray] = {'angles_array': angles_array.astype(np.float64),
                      'radius': np.array([radius]).astype(np.float64),
                      'lambda_h_pair_array': lambda_h_pair_array.astype(np.float64)}
 
@@ -1098,7 +1161,7 @@ class JobHandler:
                 obs_func = self.__get_observable_output_func(obs)
                 obs_func(obs, output_dir, 'etc_circle_sweep', hdf5_dict, angles_array,
                         results[:, 0, i], results[:, 1, i], results[:, 2, i], results[:, 3, i], results[:, 4, i], temperature, h, mu, J, lmbda, radius)
-            except Exception as e:
+            except Exception:
                 self.log.info(traceback.format_exc())
             
         self.log.info('Writing HDF5 file...')
@@ -1106,21 +1169,21 @@ class JobHandler:
         self.__write_hdf5_file(hdf5_dict, output_dir)
 
     def etc_thermalization(self,
-                              N_thermalization: int,
-                              repetitions: int,
-                              temperature: float,
-                              mu: float,
-                              h: float,
-                              J: float,
-                              lmbda: float,
-                              N_resamples: int,
-                              observables: tuple[str, ...] = ('energy',),
-                              seed: int = 0,
-                              basis: str = 'x',
-                              save_snapshots: bool = False,
-                              processes: int = 8,
-                              output_dir: str = '',
-                              **kwargs):
+                           N_thermalization: int,
+                           repetitions: int,
+                           temperature: float,
+                           mu: float,
+                           h: float,
+                           J: float,
+                           lmbda: float,
+                           N_resamples: int,
+                           observables: Sequence[str] = ('energy',),
+                           seed: int = 0,
+                           basis: str = 'x',
+                           save_snapshots: bool = False,
+                           processes: int = 8,
+                           output_dir: str | Path | None = '',
+                           **kwargs: str | int) -> None:
 
         """Average proposal-by-proposal diagnostics over repetitions and save the output."""
         begin_time = self.__get_datetime()
@@ -1137,7 +1200,7 @@ class JobHandler:
         output_dir_t = os.path.join(output_dir, 'data')
         os.mkdir(output_dir_t)
         with mp.Pool(processes=processes) as pool:
-            arguments = ((0, N_thermalization, beta, mu, h, J, lmbda, N_resamples, output_dir_t, observables, seed + i if seed else 0, basis, save_snapshots, i) for i in range(repetitions))
+            arguments = ((N_thermalization, beta, mu, h, J, lmbda, N_resamples, output_dir_t, observables, seed + i if seed else 0, basis, save_snapshots, i) for i in range(repetitions))
             results = pool.starmap(self._get_thermalization_cpp, arguments, chunksize=1)
 
         step_array = np.asarray(results[0][0], dtype=np.float64)          
@@ -1170,7 +1233,7 @@ class JobHandler:
 
         self.__write_parameters_file(output_dir, run_time, begin_time, end_time, kwargs, therm_params)
 
-        hdf5_dict = {'steps': step_array.astype(np.float64), 'acc_ratios': acc_ratio_array.astype(np.float64)}
+        hdf5_dict: dict[str, FloatArray] = {'steps': step_array.astype(np.float64), 'acc_ratios': acc_ratio_array.astype(np.float64)}
 
         self.log.info('Plotting observables...')
 
@@ -1179,18 +1242,15 @@ class JobHandler:
         )
 
         fig, ax = plt.subplots()
-        ax.xaxis.set_tick_params(direction='in', which='both')
-        ax.yaxis.set_tick_params(direction='in', which='both')
-        ax.plot(step_array, acc_ratio_array, color='navy')
-        ax.grid(color='silver', linestyle='-', alpha=0.3)
+        _set_inward_ticks(ax)
+        _plot_line(ax, step_array, acc_ratio_array, color='navy')
+        _add_grid(ax)
         ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
         ax.set(yscale='log')
         ax.set(xlabel='Update')
         ax.set(ylabel='Acceptance ratios')
 
-        fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, 'etc_thermalization_acc_ratio.pdf'))
-        plt.close(fig)
+        _save_figure(fig, os.path.join(output_dir, 'etc_thermalization_acc_ratio.pdf'))
 
         for i, obs in enumerate(observables):
             self.__warn_invalid_plot_data(
@@ -1201,119 +1261,101 @@ class JobHandler:
                     output_str = self.__get_observable_output_str(obs)
 
                     fig, ax = plt.subplots()
-                    ax.xaxis.set_tick_params(direction='in', which='both')
-                    ax.yaxis.set_tick_params(direction='in', which='both')
-                    ax.plot(step_array, obs_array[i].real, color='firebrick')
-                    ax.grid(color='silver', linestyle='-', alpha=0.3)
+                    _set_inward_ticks(ax)
+                    _plot_line(ax, step_array, obs_array[i].real, color='firebrick')
+                    _add_grid(ax)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax.set(xlabel='Update')
                     ax.set(ylabel=output_str)
 
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}.pdf"))
-                    plt.close(fig)
+                    _save_figure(fig, os.path.join(output_dir, f"etc_thermalization_{obs}.pdf"))
 
                     hdf5_dict[obs] = obs_array[i].real
 
-                    fig, (ax1, ax2) = plt.subplots(2, sharex=True)
-                    ax1.xaxis.set_tick_params(direction='in', which='both')
-                    ax1.yaxis.set_tick_params(direction='in', which='both')
-                    ax2.xaxis.set_tick_params(direction='in', which='both')
-                    ax2.yaxis.set_tick_params(direction='in', which='both')
-                    fig.suptitle(f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
+                    fig, axes = plt.subplots(2, sharex=True)
+                    ax1, ax2 = cast(Sequence[Axes], axes)
+                    _set_inward_ticks(ax1)
+                    _set_inward_ticks(ax2)
+                    _set_figure_title(fig, f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax1.set(yscale='log')
                     ax1.set(ylabel='Acceptance ratio')
-                    ax1.grid(color='silver', linestyle='-', alpha=0.3)
-                    ax1.plot(step_array, acc_ratio_array, color='navy')
+                    _add_grid(ax1)
+                    _plot_line(ax1, step_array, acc_ratio_array, color='navy')
 
                     ax2.set(xlabel='Update')
                     ax2.set(ylabel=output_str)
-                    ax2.grid(color='silver', linestyle='-', alpha=0.3)
-                    ax2.plot(step_array, obs_array[i].real, color='firebrick')
+                    _add_grid(ax2)
+                    _plot_line(ax2, step_array, obs_array[i].real, color='firebrick')
 
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_duplex_{obs}.pdf"))
-                    plt.close(fig)
+                    _save_figure(fig, os.path.join(output_dir, f"etc_thermalization_duplex_{obs}.pdf"))
                 else:
                     output_str = self.__get_observable_output_str(obs)
 
                     # Real part
 
                     fig, ax = plt.subplots()
-                    ax.xaxis.set_tick_params(direction='in', which='both')
-                    ax.yaxis.set_tick_params(direction='in', which='both')
-                    ax.plot(step_array, obs_array[i].real, color='firebrick')
-                    ax.grid(color='silver', linestyle='-', alpha=0.3)
+                    _set_inward_ticks(ax)
+                    _plot_line(ax, step_array, obs_array[i].real, color='firebrick')
+                    _add_grid(ax)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax.set(xlabel='Update')
                     ax.set(ylabel=output_str+'_real')
 
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}_real.pdf"))
-                    plt.close(fig)
+                    _save_figure(fig, os.path.join(output_dir, f"etc_thermalization_{obs}_real.pdf"))
 
                     hdf5_dict[obs+'_real'] = obs_array[i].real
                     if self.__get_observable_type(obs) == 'susceptibility':
                         hdf5_dict[obs] = obs_array[i].real  # Backward-compatible alias.
 
-                    fig, (ax1, ax2) = plt.subplots(2, sharex=True)
-                    ax1.xaxis.set_tick_params(direction='in', which='both')
-                    ax1.yaxis.set_tick_params(direction='in', which='both')
-                    ax2.xaxis.set_tick_params(direction='in', which='both')
-                    ax2.yaxis.set_tick_params(direction='in', which='both')
-                    fig.suptitle(f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
+                    fig, axes = plt.subplots(2, sharex=True)
+                    ax1, ax2 = cast(Sequence[Axes], axes)
+                    _set_inward_ticks(ax1)
+                    _set_inward_ticks(ax2)
+                    _set_figure_title(fig, f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax1.set(yscale='log')
                     ax1.set(ylabel='Acceptance ratio')
-                    ax1.grid(color='silver', linestyle='-', alpha=0.3)
-                    ax1.plot(step_array, acc_ratio_array, color='navy')
+                    _add_grid(ax1)
+                    _plot_line(ax1, step_array, acc_ratio_array, color='navy')
 
                     ax2.set(xlabel='Update')
                     ax2.set(ylabel=output_str+'_real')
-                    ax2.grid(color='silver', linestyle='-', alpha=0.3)
-                    ax2.plot(step_array, obs_array[i].real, color='firebrick')
+                    _add_grid(ax2)
+                    _plot_line(ax2, step_array, obs_array[i].real, color='firebrick')
 
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_duplex_{obs}_real.pdf"))
-                    plt.close(fig)
+                    _save_figure(fig, os.path.join(output_dir, f"etc_thermalization_duplex_{obs}_real.pdf"))
 
                     # Imaginary part
 
                     fig, ax = plt.subplots()
-                    ax.xaxis.set_tick_params(direction='in', which='both')
-                    ax.yaxis.set_tick_params(direction='in', which='both')
-                    ax.plot(step_array, obs_array[i].imag, color='firebrick')
-                    ax.grid(color='silver', linestyle='-', alpha=0.3)
+                    _set_inward_ticks(ax)
+                    _plot_line(ax, step_array, obs_array[i].imag, color='firebrick')
+                    _add_grid(ax)
                     ax.set(title=f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax.set(xlabel='Update')
                     ax.set(ylabel=output_str+'_imag')
 
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_{obs}_imag.pdf"))
-                    plt.close(fig)
+                    _save_figure(fig, os.path.join(output_dir, f"etc_thermalization_{obs}_imag.pdf"))
 
                     hdf5_dict[obs+'_imag'] = obs_array[i].imag
 
-                    fig, (ax1, ax2) = plt.subplots(2, sharex=True)
-                    ax1.xaxis.set_tick_params(direction='in', which='both')
-                    ax1.yaxis.set_tick_params(direction='in', which='both')
-                    ax2.xaxis.set_tick_params(direction='in', which='both')
-                    ax2.yaxis.set_tick_params(direction='in', which='both')
-                    fig.suptitle(f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
+                    fig, axes = plt.subplots(2, sharex=True)
+                    ax1, ax2 = cast(Sequence[Axes], axes)
+                    _set_inward_ticks(ax1)
+                    _set_inward_ticks(ax2)
+                    _set_figure_title(fig, f"Thermalization for $T = {temperature}$, $\\mu = {mu}$, $J = {J}$, $h = {h}$, $\\lambda = {lmbda}$")
                     ax1.set(yscale='log')
                     ax1.set(ylabel='Acceptance ratio')
-                    ax1.grid(color='silver', linestyle='-', alpha=0.3)
-                    ax1.plot(step_array, acc_ratio_array, color='navy')
+                    _add_grid(ax1)
+                    _plot_line(ax1, step_array, acc_ratio_array, color='navy')
 
                     ax2.set(xlabel='Update')
                     ax2.set(ylabel=output_str+'_imag')
-                    ax2.grid(color='silver', linestyle='-', alpha=0.3)
-                    ax2.plot(step_array, obs_array[i].imag, color='firebrick')
+                    _add_grid(ax2)
+                    _plot_line(ax2, step_array, obs_array[i].imag, color='firebrick')
 
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(output_dir, f"etc_thermalization_duplex_{obs}_imag.pdf"))
-                    plt.close(fig)
+                    _save_figure(fig, os.path.join(output_dir, f"etc_thermalization_duplex_{obs}_imag.pdf"))
 
-            except Exception as e:
+            except Exception:
                 self.log.info(traceback.format_exc())
         
         self.log.info('Writing HDF5 file...')
