@@ -25,14 +25,14 @@ repos:
 
 # Clang format the codebase automatically
 - repo: https://github.com/pre-commit/mirrors-clang-format
-  rev: "v22.1.2"
+  rev: "v22.1.8"
   hooks:
   - id: clang-format
     types_or: [c++, c, cuda]
 
 # Ruff, the Python auto-correcting linter/formatter written in Rust
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.9
+  rev: v0.16.1
   hooks:
   - id: ruff-check
     args: ["--fix", "--show-fixes"]
@@ -40,7 +40,7 @@ repos:
 
 # Check static types with mypy
 - repo: https://github.com/pre-commit/mirrors-mypy
-  rev: "v1.20.0"
+  rev: "v2.3.0"
   hooks:
   - id: mypy
     args: []
@@ -112,7 +112,7 @@ repos:
 # Use tools/codespell_ignore_lines_from_errors.py
 # to rebuild .codespell-ignore-lines
 - repo: https://github.com/codespell-project/codespell
-  rev: "v2.4.2"
+  rev: "v2.4.3"
   hooks:
   - id: codespell
     exclude: "(.supp|^pyproject.toml)$"
@@ -122,7 +122,7 @@ repos:
 # Use mirror because pre-commit autoupdate confuses tags in the upstream repo.
 # See https://github.com/crate-ci/typos/issues/390
 - repo: https://github.com/adhtruong/mirrors-typos
-  rev: "v1.45.0"
+  rev: "v1.48.0"
   hooks:
   - id: typos
     args: []
@@ -144,14 +144,14 @@ repos:
 
 # PyLint has native support - not always usable, but works for us
 - repo: https://github.com/PyCQA/pylint
-  rev: "v4.0.5"
+  rev: "v4.0.6"
   hooks:
   - id: pylint
     files: ^pybind11
 
 # Check schemas on some of our YAML files
 - repo: https://github.com/python-jsonschema/check-jsonschema
-  rev: 0.37.1
+  rev: 0.37.4
   hooks:
   - id: check-readthedocs
   - id: check-github-workflows

@@ -10,16 +10,16 @@
 #pragma once
 
 #include <pybind11/conduit/wrap_include_python_h.h>
-#if PY_VERSION_HEX < 0x03080000
-#    error "PYTHON < 3.8 IS UNSUPPORTED. pybind11 v2.13 was the last to support Python 3.7."
+#if PY_VERSION_HEX < 0x03090000
+#    error "PYTHON < 3.9 IS UNSUPPORTED. pybind11 v3.0 was the last to support Python 3.8."
 #endif
 
 // Similar to Python's convention: https://docs.python.org/3/c-api/apiabiversion.html
 // See also: https://github.com/python/cpython/blob/HEAD/Include/patchlevel.h
 /* -- start version constants -- */
 #define PYBIND11_VERSION_MAJOR 3
-#define PYBIND11_VERSION_MINOR 0
-#define PYBIND11_VERSION_MICRO 4
+#define PYBIND11_VERSION_MINOR 1
+#define PYBIND11_VERSION_MICRO 0
 // ALPHA = 0xA, BETA = 0xB, GAMMA = 0xC (release candidate), FINAL = 0xF (stable release)
 // - The release level is set to "alpha" for development versions.
 //   Use 0xA0 (LEVEL=0xA, SERIAL=0) for development versions.
@@ -27,7 +27,7 @@
 #define PYBIND11_VERSION_RELEASE_LEVEL PY_RELEASE_LEVEL_FINAL
 #define PYBIND11_VERSION_RELEASE_SERIAL 0
 // String version of (micro, release level, release serial), e.g.: 0a0, 0b1, 0rc1, 0
-#define PYBIND11_VERSION_PATCH 4
+#define PYBIND11_VERSION_PATCH 0
 /* -- end version constants -- */
 
 #if !defined(Py_PACK_FULL_VERSION)
@@ -87,7 +87,7 @@
 #    endif
 #endif
 
-#if defined(__cpp_lib_launder) && !(defined(_MSC_VER) && (_MSC_VER < 1920)) // See PR #5968
+#if defined(__cpp_lib_launder)
 #    define PYBIND11_STD_LAUNDER std::launder
 #    define PYBIND11_HAS_STD_LAUNDER 1
 #else
@@ -132,8 +132,8 @@
 #        error pybind11 requires gcc 4.8 or newer
 #    endif
 #elif defined(_MSC_VER)
-#    if _MSC_VER < 1910
-#        error pybind11 2.10+ requires MSVC 2017 or newer
+#    if _MSC_VER < 1920
+#        error pybind11 3.1+ requires MSVC 2019 or newer
 #    endif
 #endif
 
@@ -826,7 +826,7 @@ using void_t = typename void_t_impl<Ts...>::type;
 #endif
 
 /// Compile-time all/any/none of that check the boolean value of all template types
-#if defined(__cpp_fold_expressions) && !(defined(_MSC_VER) && (_MSC_VER < 1916))
+#if defined(__cpp_fold_expressions)
 template <class... Ts>
 using all_of = bool_constant<(Ts::value && ...)>;
 template <class... Ts>
@@ -1357,7 +1357,7 @@ try_get_shared_from_this(std::enable_shared_from_this<T> *holder_value_ptr) {
 // Use at your own risk!
 // See also https://en.cppreference.com/w/cpp/memory/enable_shared_from_this, and in particular
 // the `std::shared_ptr<Good> gp1 = not_so_good.getptr();` and `try`-`catch` parts of the example.
-#if defined(__cpp_lib_enable_shared_from_this) && (!defined(_MSC_VER) || _MSC_VER >= 1912)
+#if defined(__cpp_lib_enable_shared_from_this)
     return holder_value_ptr->weak_from_this().lock();
 #else
     try {
@@ -1370,19 +1370,10 @@ try_get_shared_from_this(std::enable_shared_from_this<T> *holder_value_ptr) {
 
 // For silencing "unused" compiler warnings in special situations.
 template <typename... Args>
-#if defined(_MSC_VER) && _MSC_VER < 1920 // MSVC 2017
-constexpr
-#endif
-    inline void silence_unused_warnings(Args &&...) {
-}
+inline void silence_unused_warnings(Args &&...) {}
 
-// MSVC warning C4100: Unreferenced formal parameter
-#if defined(_MSC_VER) && _MSC_VER <= 1916
-#    define PYBIND11_WORKAROUND_INCORRECT_MSVC_C4100(...)                                         \
-        detail::silence_unused_warnings(__VA_ARGS__)
-#else
-#    define PYBIND11_WORKAROUND_INCORRECT_MSVC_C4100(...)
-#endif
+// MSVC warning C4100: Unreferenced formal parameter (only incorrect before MSVC 2019)
+#define PYBIND11_WORKAROUND_INCORRECT_MSVC_C4100(...)
 
 // GCC -Wunused-but-set-parameter  All GCC versions (as of July 2021).
 #if defined(__GNUG__) && !defined(__clang__) && !defined(__INTEL_COMPILER)
@@ -1410,9 +1401,9 @@ constexpr
 //                                                                    std::move(args)
 #endif
 
-// Pybind offers detailed error messages by default for all builts that are debug (through the
-// negation of NDEBUG). This can also be manually enabled by users, for any builds, through
-// defining PYBIND11_DETAILED_ERROR_MESSAGES. This information is primarily useful for those
+// Pybind offers detailed error messages by default in debug builds (through the negation of
+// NDEBUG). This can also be manually enabled by users for any build by defining
+// PYBIND11_DETAILED_ERROR_MESSAGES. This information is primarily useful for those
 // who are writing (as opposed to merely using) libraries that use pybind11.
 #if !defined(PYBIND11_DETAILED_ERROR_MESSAGES) && !defined(NDEBUG)
 #    define PYBIND11_DETAILED_ERROR_MESSAGES

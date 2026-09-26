@@ -39,11 +39,11 @@
 /// further ABI-incompatible changes may be made before the ABI is officially
 /// changed to the new version.
 #ifndef PYBIND11_INTERNALS_VERSION
-#    define PYBIND11_INTERNALS_VERSION 11
+#    define PYBIND11_INTERNALS_VERSION 12
 #endif
 
-#if PYBIND11_INTERNALS_VERSION < 11
-#    error "PYBIND11_INTERNALS_VERSION 11 is the minimum for all platforms for pybind11v3."
+#if PYBIND11_INTERNALS_VERSION < 12
+#    error "PYBIND11_INTERNALS_VERSION 12 is the minimum for all platforms for pybind11 v3.1.0"
 #endif
 
 PYBIND11_NAMESPACE_BEGIN(PYBIND11_NAMESPACE)
@@ -98,7 +98,7 @@ public:
         // Neither of those have anything to do with CPython internals. PyMem_RawFree *requires*
         // that the `key` be allocated with the CPython allocator (as it is by
         // PyThread_tss_create).
-        // However, in GraalPy (as of v24.2 or older), TSS is implemented by Java and this call
+        // However, in GraalPy (as of v25.0 or older), TSS is implemented by Java and this call
         // requires a living Python interpreter.
 #ifdef GRAALVM_PYTHON
         if (Py_IsInitialized() == 0 || _Py_IsFinalizing() != 0) {
@@ -189,7 +189,7 @@ inline bool same_type(const std::type_info &lhs, const std::type_info &rhs) {
 }
 
 struct type_hash {
-    size_t operator()(const std::type_index &t) const {
+    size_t operator()(const std::type_index &t) const noexcept {
         size_t hash = 5381;
         const char *ptr = t.name();
         while (auto c = static_cast<unsigned char>(*ptr++)) {
@@ -200,7 +200,7 @@ struct type_hash {
 };
 
 struct type_equal_to {
-    bool operator()(const std::type_index &lhs, const std::type_index &rhs) const {
+    bool operator()(const std::type_index &lhs, const std::type_index &rhs) const noexcept {
         return lhs.name() == rhs.name() || std::strcmp(lhs.name(), rhs.name()) == 0;
     }
 };
@@ -216,7 +216,7 @@ template <typename value_type>
 using type_map = std::unordered_map<std::type_index, value_type, type_hash, type_equal_to>;
 
 struct override_hash {
-    size_t operator()(const std::pair<const PyObject *, const char *> &v) const {
+    size_t operator()(const std::pair<const PyObject *, const char *> &v) const noexcept {
         size_t value = std::hash<const void *>()(v.first);
         value ^= std::hash<const void *>()(v.second) + 0x9e3779b9 + (value << 6) + (value >> 2);
         return value;
