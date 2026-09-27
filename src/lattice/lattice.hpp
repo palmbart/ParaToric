@@ -127,14 +127,7 @@ public:
 
         check_input_validity();
 
-        g = init_lattice_graph(
-            BASIS,
-            LATTICE_TYPE, 
-            SYSTEM_SIZE,
-            BETA,
-            BOUNDARIES,
-            DEFAULT_SPIN
-            );
+        init_lattice_graph();
 
         build_caches_();
         init_potential_energy();
@@ -903,25 +896,8 @@ private:
     /** @brief Transpose snapshot rows into GraphML edge histories and release the spool. */
     void write_snapshot_graphml_from_spool_(const std::string& file_name, const std::filesystem::path& output_directory);
 
-    /**
-     * @brief Build vertices, edges, plaquettes, cubes, coordinates, and loop paths.
-     * @param basis Spin eigenbasis.
-     * @param lattice_type Supported geometry name.
-     * @param L Positive linear system size.
-     * @param beta Imaginary-time period.
-     * @param boundaries "periodic" or "open".
-     * @param default_spin Initial spin on every edge: -1 or +1.
-     * @return Graph with the geometry's initial spin configuration.
-     * @note Populates the class's geometry tables as well as the returned graph.
-     */
-    LatticeGraph init_lattice_graph(
-        char basis,
-        const std::string& lattice_type, 
-        int L,
-        double beta,
-        const std::string& boundaries,
-        int default_spin
-        );
+    /** @brief Instantiate the graph and QMC storage from reusable geometry mappings. */
+    void init_lattice_graph();
     /**
      * @brief Integrate a bare diagonal tuple product using only single-spin histories.
      * @pre Tuple events leave this product unchanged, as for stars in x or plaquettes in z.
@@ -969,21 +945,6 @@ private:
     mutable std::uniform_int_distribution<int> vertex_dist;
     mutable std::uniform_int_distribution<int> plaquette_dist;
 
-    /**
-     * @brief Construct half and full Wilson (z) or dual 't Hooft (x) paths.
-     * @param start_y Upper bound of the full loop.
-     * @param end_y Lower bound of both loops.
-     * @param middle_y Upper bound of the half loop.
-     * @param start_x Lower x bound of both loops.
-     * @param end_x Upper x bound of both loops.
-     * @param basis Spin basis selecting Wilson or dual paths.
-     * @return (half-loop vertex pairs, full-loop vertex pairs).
-     * @note Paths and supported sizes depend on geometry. Kagome paths are not implemented.
-     */
-    std::pair<std::vector<VertexPair>, std::vector<VertexPair>> 
-    construct_fredenhagen_marcu_loops(
-        int start_y, int end_y, int middle_y, int start_x, int end_x, char basis
-    );
     // Lattice copies share this generator; copying the RNG object itself reseeds it.
     std::shared_ptr<RNG> rng;
     std::uniform_real_distribution<double> uniform_dist{0., 1.};

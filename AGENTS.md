@@ -21,7 +21,8 @@ authority for current build and API behavior; update this guide when those chang
 | `src/mcmc/extended_toric_code.cpp`, `extended_toric_code_c.cpp` | Runtime basis dispatch and C adapter. |
 | `src/mcmc/extended_toric_code_qmc.hpp` | Template backend `ExtendedToricCodeQMC<'x'/'z'>`, updates, estimators, `obs_vec` registry. |
 | `src/mcmc/input_validation.hpp` | Shared configuration validation; geometry/coupling checks also live in lattice/backend code. |
-| `src/lattice/lattice.{hpp,cpp}`, `time_search.hpp` | Geometry, event histories, energy caches, percolation/loops, GraphML snapshots, sorted time searches. |
+| `src/lattice/lattice_geometry.{hpp,cpp}` | Graph-independent unit-cell generation: ordered vertex/edge/plaquette/cube mappings, coordinates, incidence, and Fredenhagen-Marcu paths. |
+| `src/lattice/lattice.{hpp,cpp}`, `time_search.hpp` | Graph and spin-state construction from geometry mappings, event histories, energy caches, percolation/loops, GraphML snapshots, sorted time searches. |
 | `src/rng/`, `src/statistics/` | RNG, bootstrap estimators, autocorrelation. |
 | `src/cli/paratoric.cpp`, `src/io/` | Boost.Program_options native CLI and HDF5 serialization. |
 | `python/bindings/`, `python/paratoric/` | pybind11 extension, package imports, `_paratoric.pyi` signatures and array contracts. |
@@ -77,7 +78,7 @@ compiler with `CC`/`CXX` or `CMAKE_CXX_COMPILER` in a fresh build directory.
 
 For development use a separate Debug build, e.g. `-B build/debug
 -DCMAKE_BUILD_TYPE=Debug`. CTest names are `test_lattice`,
-`test_extended_toric_code_qmc`, and `test_input_validation`; select a relevant
+`test_lattice_geometry`, `test_extended_toric_code_qmc`, and `test_input_validation`; select a relevant
 test with `ctest --test-dir build/debug -R test_input_validation --output-on-failure`.
 
 ## C++ and C integration
@@ -202,6 +203,16 @@ not include. See README for full sweep commands.
 - For backend changes preserve x/z duality, sorted imaginary-time histories,
   and consistency of accepted moves with energy caches. Rebuild bare caches
   when changing couplings; zero-coupling caches may be stale.
+- Reuse `make_lattice_geometry(type, size, boundaries)` for new lattice classes;
+  it returns plain mappings without Boost, RNG, or QMC state. Fredenhagen-Marcu
+  paths are a separate optional function. Preserve construction order (seeded
+  proposals depend on it), staggered boundary cuts, and existing geometry
+  conventions; `test_lattice_geometry` freezes the pre-extraction mappings.
+- Kagome includes triangular and hexagonal plaquettes, with hexagons appended
+  after all triangles. Both use coupling `J`; their construction blocks are
+  marked in `lattice_geometry.cpp` for future separation. Boundary size (3/6)
+  identifies the shape. Kagome plaquette coordinates remain zero, and its
+  Fredenhagen-Marcu paths remain unimplemented.
 - Add observables in backend `obs_vec` and Python `JobHandler.obs_dict`; update
   statistics/I/O handling if introducing a category. For geometry changes,
   update validation and check loops/percolation as well as lattice construction.
