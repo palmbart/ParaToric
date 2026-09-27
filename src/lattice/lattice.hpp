@@ -1182,24 +1182,10 @@ inline double Lattice::integrated_edge_energy_diff_no_inner_flips(
             "integrated_edge_energy_diff_no_inner_flips: time interval must be non-zero");
     }
 
-    const auto& spin_flips = g[edg].spin_flips;
-    // In a tuple-move window the spin is constant on either side of the
-    // selected event. Its already-known rank determines the spin by parity.
-    if (known_flip_index >= 0 && imag_time_2 == known_flip_time) {
-        const int spin = (known_flip_index & 1) ? -get_spin(edg) : get_spin(edg);
-        return -2.0 * (imag_time_2 - imag_time_1) * spin;
-    }
-    auto it = known_flip_index >= 0 && imag_time_1 == known_flip_time
-        ? spin_flips.begin() + known_flip_index
-        : detail::time_lower_bound(spin_flips.begin(), spin_flips.end(), imag_time_1);
-
-    int spin = ((it - spin_flips.begin()) & 1) ? -get_spin(edg) : get_spin(edg);
-    while (it != spin_flips.end() && *it == imag_time_1) {
-        spin = -spin;
-        ++it;
-    }
-
-    return -2.0 * (imag_time_2 - imag_time_1) * spin;
+    return -2.0 * detail::spin_integral_no_inner_flips(
+        {get_spin(edg), g[edg].spin_flips}, imag_time_1, imag_time_2,
+        known_flip_index, known_flip_time
+    );
 }
 
 /** @brief Integrate the bare edge change from a sorted proposed flip schedule. */
@@ -1272,33 +1258,7 @@ inline double Lattice::integrated_edge_energy(
             "integrated_edge_energy: time interval must be non-zero");
     }
 
-    const auto& spin_flips = g[edg].spin_flips;  
-    auto lo = detail::time_lower_bound(
-        spin_flips.begin(), spin_flips.end(), imag_time_1);
-
-    // Parity of events strictly before the lower bound gives its incoming spin.
-    int base_spin = get_spin(edg);
-    int spin      = (((lo - spin_flips.begin()) & 1)
-                     ? -base_spin
-                     :  base_spin);
-
-    double energy = 0.0;
-    double t_prev = imag_time_1;
-
-    // Events at the lower bound toggle the spin before any positive-length segment.
-    for (auto it = lo; it != spin_flips.end() && *it <= imag_time_2; ++it) {
-        double t_curr = *it;
-        energy += (t_curr - t_prev) * spin;
-        spin   = -spin;
-        t_prev = t_curr;
-    }
-
-    // Integrate the final segment after the last event.
-    if (t_prev < imag_time_2) {
-        energy += (imag_time_2 - t_prev) * spin;
-    }
-
-    return energy;
+    return detail::spin_integral({get_spin(edg), g[edg].spin_flips}, imag_time_1, imag_time_2);
 }
 
 /** @brief Integrate a tuple-product change from a local combination schedule. */
@@ -1363,12 +1323,7 @@ inline double Lattice::integrated_tuple_energy_diff_combination_from_flips(
             int spin_prod = 1;
             for (const Edge& e : tuple_edges) {
                 const auto& flips = single_flips_only ? g[e].single_spin_flips : g[e].spin_flips;
-                const auto hi = detail::time_upper_bound(flips.begin(), flips.end(), imag_time_2);
-                int s = get_spin(e);
-                if (((hi - flips.begin()) & 1) != 0) {
-                    s = -s;
-                }
-                spin_prod *= s;
+                spin_prod *= detail::spin_at_time({get_spin(e), flips}, imag_time_2);
             }
             spin_at_cutoff = spin_prod;
             spin_at_cutoff_ready = true;
@@ -1445,84 +1400,12 @@ inline double Lattice::integrated_tuple_energy_diff_single_flips(
 inline double Lattice::integrated_tuple_energy_from_flips(
     std::span<const Edge> tuple_edges, double imag_time_1, double imag_time_2, bool single_flips_only
 ) {
-    if (imag_time_1 >= imag_time_2) {
-        return 0.0;
-    }
-
-    // Merge histories backwards, combining equal-time flips by parity. This
-    // avoids allocating and sorting a combined list for every tuple integral.
-    struct EdgeReverseStream {
-        std::vector<double>::const_iterator begin;
-        std::vector<double>::const_iterator it; // one past current event
-    };
-
-    boost::container::small_vector<EdgeReverseStream, 8> streams;
-    streams.reserve(tuple_edges.size());
-
-    int spin_at_t2 = 1;
-    for (auto const& edg : tuple_edges) {
-        auto const& spin_flips = single_flips_only ? g[edg].single_spin_flips : g[edg].spin_flips;
-        auto hi = detail::time_upper_bound(spin_flips.begin(), spin_flips.end(), imag_time_2);
-
-        int s = get_spin(edg);
-        if (((hi - spin_flips.begin()) & 1) != 0) {
-            s = -s;
+    return detail::spin_product_integral(
+        tuple_edges, imag_time_1, imag_time_2,
+        [&](const Edge& edg) -> detail::WorldlineView {
+            return {get_spin(edg), single_flips_only ? g[edg].single_spin_flips : g[edg].spin_flips};
         }
-        spin_at_t2 *= s;
-
-        if (hi != spin_flips.begin() && *(hi - 1) >= imag_time_1) {
-            streams.push_back({spin_flips.begin(), hi});
-        }
-    }
-
-    double odd_len = 0.0;
-    bool odd = false;
-    double t_next = imag_time_2;
-
-    while (!streams.empty()) {
-        double max_t = *(streams[0].it - 1);
-        for (size_t i = 1; i < streams.size(); ++i) {
-            const double cand = *(streams[i].it - 1);
-            if (cand > max_t) {
-                max_t = cand;
-            }
-        }
-        if (odd) {
-            odd_len += t_next - max_t;
-        }
-
-        bool toggles = false;
-        size_t i = 0;
-        while (i < streams.size()) {
-            auto& stream = streams[i];
-            if (*(stream.it - 1) != max_t) {
-                ++i;
-                continue;
-            }
-
-            toggles = !toggles;
-            --stream.it;
-
-            if (stream.it == stream.begin || *(stream.it - 1) < imag_time_1) {
-                streams[i] = streams.back();
-                streams.pop_back();
-                continue;
-            }
-            ++i;
-        }
-
-        if (toggles) {
-            odd = !odd;
-        }
-        t_next = max_t;
-    }
-
-    if (odd) {
-        odd_len += t_next - imag_time_1;
-    }
-
-    const double interval_len = imag_time_2 - imag_time_1;
-    return static_cast<double>(spin_at_t2) * (interval_len - 2.0 * odd_len);
+    );
 }
 
 } // namespace paratoric

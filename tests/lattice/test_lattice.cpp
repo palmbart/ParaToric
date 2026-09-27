@@ -1431,4 +1431,78 @@ BOOST_AUTO_TEST_CASE(plaquette_percolation_strength_test_1) {
     BOOST_CHECK(7/(double)lat.get_plaquette_count() == lat.plaquette_percolation_strength());
 }
 
+BOOST_AUTO_TEST_CASE(shared_history_mutations_keep_operator_channels_synchronized) {
+    for (char basis : {'x', 'z'}) {
+        Lattice lat(LatSpec{basis, "square", 6, 4., "periodic", 1});
+        const auto tuple = basis == 'x' ? lat.get_plaquette_edges(0) : lat.get_star_edges(0);
+        const auto edge = tuple.front();
+        lat.insert_double_tuple_flip(0, tuple, 1., 3.);
+        lat.insert_double_single_spin_flip(edge, 1.5, 2.5);
+
+        const auto check_histories = [&]() {
+            const auto tuple_times = lat.get_tuple_spin_flips(0);
+            for (const auto& e : tuple) {
+                const auto singles = lat.get_single_spin_flips(e);
+                std::vector<double> expected(tuple_times.begin(), tuple_times.end());
+                expected.insert(expected.end(), singles.begin(), singles.end());
+                std::sort(expected.begin(), expected.end());
+                BOOST_REQUIRE_EQUAL(lat.get_spin_flip_count(e), expected.size());
+                for (std::size_t i = 0; i < expected.size(); ++i) {
+                    BOOST_CHECK_EQUAL(lat.get_spin_flip_imag_time(e, i), expected[i]);
+                }
+            }
+        };
+
+        check_histories();
+        // First-to-last and last-to-first moves cross the origin on all edges.
+        lat.move_tuple_flip(0, tuple, 1., 3.5, false);
+        lat.flip_tuple(tuple);
+        check_histories();
+        lat.move_tuple_flip(0, tuple, 3.5, 0.5, false);
+        lat.flip_tuple(tuple);
+        check_histories();
+
+        Lattice::SmallIndexVector indices;
+        lat.tuple_flip_window(tuple, 3., &indices);
+        lat.move_tuple_flip(0, tuple, 3., 2.75, true, indices, 1);
+        check_histories();
+        lat.delete_double_tuple_flip(0, tuple, 0.5, 2.75);
+        check_histories();
+
+        lat.move_spin_flip(edge, 0, 3.5, false);
+        lat.flip_spin(edge);
+        check_histories();
+        lat.move_spin_flip(edge, 1, 1., false);
+        lat.flip_spin(edge);
+        check_histories();
+        lat.delete_double_single_spin_flip(edge, 1., 2.5);
+        check_histories();
+        for (const auto& e : tuple) {
+            BOOST_CHECK_EQUAL(lat.get_spin_flip_count(e), 0);
+            BOOST_CHECK_EQUAL(lat.get_spin(e), 1);
+        }
+
+        // A common origin rotation must also keep operator and full histories aligned.
+        lat.insert_double_tuple_flip(0, tuple, 1., 3.);
+        lat.insert_double_single_spin_flip(edge, 0.5, 2.5);
+        const double before = lat.total_integrated_edge_energy();
+        lat.get_rng()->set_seed(1927);
+        lat.rotate_imag_time();
+        check_histories();
+        BOOST_CHECK_SMALL(lat.total_integrated_edge_energy() - before, 1.e-12);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(shared_integrals_preserve_lattice_interval_contracts) {
+    Lattice lat(LatSpec{'x', "square", 6, 4., "periodic", 1});
+    const auto edge = lat.get_plaquette_edges(0).front();
+    lat.insert_double_single_spin_flip(edge, 1., 3.);
+    BOOST_CHECK_EQUAL(lat.integrated_edge_energy_weighted(edge, 0., 4.), -2.);
+    BOOST_CHECK_EQUAL(lat.integrated_edge_energy_weighted(edge, 3., 1.), 1.);
+    BOOST_CHECK_EQUAL(lat.integrated_edge_energy_diff_no_inner_flips(edge, 1., 3., 0, 1.), 4.);
+    BOOST_CHECK_THROW(lat.integrated_edge_energy(edge, 1., 1.), std::invalid_argument);
+    BOOST_CHECK_THROW(lat.integrated_edge_energy_weighted(edge, 1., 1.), std::invalid_argument);
+    BOOST_CHECK_EQUAL(lat.integrated_tuple_energy(lat.get_plaquette_edges(0), 1., 1.), 0.);
+}
+
 } // namespace paratoric

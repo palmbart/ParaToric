@@ -6,6 +6,7 @@ find_package(Boost COMPONENTS unit_test_framework REQUIRED NO_MODULE)
 set(test_sources
     lattice/test_lattice.cpp
     lattice/test_lattice_geometry.cpp
+    lattice/test_time_search.cpp
     mcmc/test_extended_toric_code_qmc.cpp
     mcmc/test_input_validation.cpp
 )

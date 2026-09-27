@@ -22,7 +22,8 @@ authority for current build and API behavior; update this guide when those chang
 | `src/mcmc/extended_toric_code_qmc.hpp` | Template backend `ExtendedToricCodeQMC<'x'/'z'>`, updates, estimators, `obs_vec` registry. |
 | `src/mcmc/input_validation.hpp` | Shared configuration validation; geometry/coupling checks also live in lattice/backend code. |
 | `src/lattice/lattice_geometry.{hpp,cpp}` | Graph-independent unit-cell generation: ordered vertex/edge/plaquette/cube mappings, coordinates, incidence, and Fredenhagen-Marcu paths. |
-| `src/lattice/lattice.{hpp,cpp}`, `time_search.hpp` | Graph and spin-state construction from geometry mappings, event histories, energy caches, percolation/loops, GraphML snapshots, sorted time searches. |
+| `src/lattice/lattice.{hpp,cpp}` | Graph and spin-state construction from geometry mappings, event histories, energy caches, percolation/loops, GraphML snapshots. |
+| `src/lattice/time_search.hpp` | Geometry-independent history searches/mutations, time-origin rotation, borrowed `WorldlineView`, spin and spin-product integrals. |
 | `src/rng/`, `src/statistics/` | RNG, bootstrap estimators, autocorrelation. |
 | `src/cli/paratoric.cpp`, `src/io/` | Boost.Program_options native CLI and HDF5 serialization. |
 | `python/bindings/`, `python/paratoric/` | pybind11 extension, package imports, `_paratoric.pyi` signatures and array contracts. |
@@ -78,7 +79,7 @@ compiler with `CC`/`CXX` or `CMAKE_CXX_COMPILER` in a fresh build directory.
 
 For development use a separate Debug build, e.g. `-B build/debug
 -DCMAKE_BUILD_TYPE=Debug`. CTest names are `test_lattice`,
-`test_lattice_geometry`, `test_extended_toric_code_qmc`, and `test_input_validation`; select a relevant
+`test_lattice_geometry`, `test_time_search`, `test_extended_toric_code_qmc`, and `test_input_validation`; select a relevant
 test with `ctest --test-dir build/debug -R test_input_validation --output-on-failure`.
 
 ## C++ and C integration
@@ -203,6 +204,14 @@ not include. See README for full sweep commands.
 - For backend changes preserve x/z duality, sorted imaginary-time histories,
   and consistency of accepted moves with energy caches. Rebuild bare caches
   when changing couplings; zero-coupling caches may be stale.
+- Reuse `detail::WorldlineView` and the helpers in `time_search.hpp` for site or
+  bond spins. Views borrow histories and must be reacquired after mutation.
+  Integrals take ordered, non-wrapping intervals and return bare spin factors;
+  split wrapped intervals in the caller. Product integration accepts views or
+  model-owned entries with an adapter. Supply full histories unless the model
+  proves a reduced history equivalent (as for ETC diagonal tuple products).
+  History mutations do not synchronize operator channels or update caches;
+  crossing the time origin also requires the caller to reverse the spin.
 - Reuse `make_lattice_geometry(type, size, boundaries)` for new lattice classes;
   it returns plain mappings without Boost, RNG, or QMC state. Fredenhagen-Marcu
   paths are a separate optional function. Preserve construction order (seeded
