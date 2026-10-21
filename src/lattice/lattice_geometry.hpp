@@ -58,7 +58,10 @@ LatticeGeometry make_lattice_geometry(
 /** Half/full Wilson (z) or dual 't Hooft (x) paths as vertex pairs.
  * The geometry must match the supplied type, size, and boundaries.
  * Kept separate so other lattice classes can use geometry without these
- * observables. Preserves the existing size/support checks in debug builds.
+ * observables. Honeycomb Wilson paths require size >= 3 in all builds;
+ * other existing size/support checks remain limited to debug builds.
+ * In all builds, Wilson and 't Hooft paths reject repeated undirected edges and
+ * honeycomb dual steps must cross adjacent plaquettes (std::runtime_error).
  */
 std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_paths(
     const LatticeGeometry& geometry, const std::string& lattice_type,

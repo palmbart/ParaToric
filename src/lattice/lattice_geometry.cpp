@@ -7,6 +7,7 @@
 #include <cmath>
 #include <format>
 #include <initializer_list>
+#include <set>
 #include <stdexcept>
 
 namespace paratoric {
@@ -325,6 +326,14 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
             for (int x = end_x - 1; x >= start_x; --x) append(x, start_y);
             for (int y = start_y + 1; y <= middle_y; ++y) append(start_x, y);
         } else if (lattice_type == "honeycomb") {
+            if (L < 3) {
+                throw std::runtime_error(std::format(
+                    "System size for honeycomb Wilson loops has to be at least L=3 but is L={}.", L));
+            }
+            // Rounding the physical bounds can give the two halves different
+            // numbers of zigzag steps. Mirror the upper half so the lower
+            // half returns to the starting vertex rather than leaving a gap.
+            const int lower_y = 2 * middle_y - end_y;
             if (boundaries == "periodic") {
                 int prev_vertex, next_vertex;
 
@@ -372,7 +381,7 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
                 // Store half_loop after half of the path
                 half_loop = full_loop;
 
-                for (int y = middle_y; y > start_y; y-=2) {
+                for (int y = middle_y; y > lower_y; y-=2) {
                     next_vertex = prev_vertex - 2 * L;
                     full_loop.emplace_back(prev_vertex, next_vertex);
                     prev_vertex = next_vertex;
@@ -396,7 +405,7 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
                     prev_vertex = next_vertex;
                 }
 
-                for (int y = start_y; y < middle_y; y+=2) {
+                for (int y = lower_y; y < middle_y; y+=2) {
                     next_vertex = prev_vertex + 2 * L;
                     full_loop.emplace_back(prev_vertex, next_vertex);
                     prev_vertex = next_vertex;
@@ -406,17 +415,6 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
                     prev_vertex = next_vertex;
                 }
             } else {
-                if (L < 3) {
-#ifndef NDEBUG
-                    throw std::runtime_error(
-                        std::format(
-                            "System size for open honeycomb Wilson loops has to be at least L=3 but is L={}.",
-                            L
-                        )
-                    );
-#endif
-                }
-
                 auto honeycomb_vertex = [L](int row, int col) {
                     if (row == 0) {
                         return col;
@@ -491,7 +489,7 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
 
                 half_loop = full_loop;
 
-                for (int y = middle_y; y > start_y; y -= 2) {
+                for (int y = middle_y; y > lower_y; y -= 2) {
                     append_vertical_up();
                     append_horizontal(-1);
                 }
@@ -503,7 +501,7 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
                     append_horizontal(-1);
                 }
 
-                for (int y = start_y; y < middle_y; y += 2) {
+                for (int y = lower_y; y < middle_y; y += 2) {
                     append_vertical_down();
                     append_horizontal(-1);
                 }
@@ -560,7 +558,9 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
                 full_loop.emplace_back(start_vertex, start_vertex-L);
             }
 
-            for (int y = start_y; y < middle_y+1; ++y) {
+            // The first segment already crosses the edge at middle_y.
+            // Close the dual loop without multiplying that spin twice.
+            for (int y = start_y; y < middle_y; ++y) {
                 start_vertex = y * L + start_x;
                 full_loop.emplace_back(start_vertex, start_vertex-1);
             }
@@ -685,9 +685,7 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
                     }
                 }
 
-#ifndef NDEBUG
                 throw std::runtime_error("Honeycomb 't Hooft loop crosses non-adjacent plaquettes.");
-#endif
             };
 
             int prev_plaquette = plaquette_index(L, middle_y_hc, start_x_hc);
@@ -738,6 +736,25 @@ std::pair<LatticeGeometry::Path, LatticeGeometry::Path> make_fredenhagen_marcu_p
             return std::make_pair(half_loop, full_loop);
         }
     }
+
+    const auto check_duplicates = [&](const auto& path, const char* name) {
+        std::set<VertexPair> edges;
+        for (const auto& [source, target] : path) {
+            // Spins live on undirected edges: (u,v) and (v,u) are the
+            // same operator and must not cancel in the loop product.
+            const VertexPair edge{std::min(source, target), std::max(source, target)};
+            if (!edges.insert(edge).second) {
+                throw std::runtime_error(std::format(
+                    "Duplicate edge ({}, {}) in {} {} path for {} lattice, L={}, {} boundaries.",
+                    edge.first, edge.second, name, basis == 'x' ? "'t Hooft" : "Wilson",
+                    lattice_type, L, boundaries));
+            }
+        }
+    };
+    // Check each path separately: the half path is a prefix of the full
+    // path, so sharing edges between the two paths is intentional.
+    check_duplicates(half_loop, "half");
+    check_duplicates(full_loop, "full");
 
     return std::make_pair(half_loop, full_loop);
 }

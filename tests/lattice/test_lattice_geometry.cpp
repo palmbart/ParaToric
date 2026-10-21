@@ -64,21 +64,23 @@ struct Fixture {
 // ordered mappings, coordinates, orientations, cube incidence, and both paths.
 // In particular L=2 retains parallel edges; odd open patches exercise row cuts.
 // Kagome's subsequently appended hexagons are tested separately below.
+// Corrected loop fixtures omit the square x-path's repeated closing edge and
+// use mirrored honeycomb Wilson halves to close the full path.
 constexpr Fixture fixtures[] = {
     {"square", "open", 2, 200113429711695586ULL, 9808874869469701221ULL, 9808874869469701221ULL},
     {"square", "open", 3, 10077877769477543934ULL, 9808874869469701221ULL, 10145272227952522563ULL},
     {"square", "open", 4, 17444478573154458582ULL, 9808874869469701221ULL, 7064727803264080779ULL},
-    {"square", "open", 6, 5793185067320925546ULL, 1992873620315726922ULL, 5292724192319397515ULL},
-    {"square", "open", 7, 4241993535162558462ULL, 1123047068572142259ULL, 372824341776044659ULL},
-    {"square", "open", 8, 17164768143674437670ULL, 1257959852287882354ULL, 2997324090125297977ULL},
-    {"square", "open", 10, 15980311002235452694ULL, 3772072762501218510ULL, 3824966090882466041ULL},
+    {"square", "open", 6, 5793185067320925546ULL, 18130604545333555242ULL, 5292724192319397515ULL},
+    {"square", "open", 7, 4241993535162558462ULL, 15745656999922787027ULL, 372824341776044659ULL},
+    {"square", "open", 8, 17164768143674437670ULL, 6250604782017814290ULL, 2997324090125297977ULL},
+    {"square", "open", 10, 15980311002235452694ULL, 5725836866417223948ULL, 3824966090882466041ULL},
     {"square", "periodic", 2, 2317684135802314551ULL, 9808874869469701221ULL, 9808874869469701221ULL},
     {"square", "periodic", 3, 7743146729057167928ULL, 9808874869469701221ULL, 10145272227952522563ULL},
     {"square", "periodic", 4, 3480313625180775991ULL, 9808874869469701221ULL, 7064727803264080779ULL},
-    {"square", "periodic", 6, 16834230515723417631ULL, 1992873620315726922ULL, 5292724192319397515ULL},
-    {"square", "periodic", 7, 10321605866418449616ULL, 1123047068572142259ULL, 372824341776044659ULL},
-    {"square", "periodic", 8, 2680931725857083663ULL, 1257959852287882354ULL, 2997324090125297977ULL},
-    {"square", "periodic", 10, 4372363485375877063ULL, 3772072762501218510ULL, 3824966090882466041ULL},
+    {"square", "periodic", 6, 16834230515723417631ULL, 18130604545333555242ULL, 5292724192319397515ULL},
+    {"square", "periodic", 7, 10321605866418449616ULL, 15745656999922787027ULL, 372824341776044659ULL},
+    {"square", "periodic", 8, 2680931725857083663ULL, 6250604782017814290ULL, 2997324090125297977ULL},
+    {"square", "periodic", 10, 4372363485375877063ULL, 5725836866417223948ULL, 3824966090882466041ULL},
     {"cubic", "open", 2, 3731207052943570678ULL, 9808874869469701221ULL, 9808874869469701221ULL},
     {"cubic", "open", 3, 10574663209668341391ULL, 9808874869469701221ULL, 6830983799841977441ULL},
     {"cubic", "open", 4, 5572079754351308500ULL, 9808874869469701221ULL, 5375012402013025163ULL},
@@ -108,7 +110,7 @@ constexpr Fixture fixtures[] = {
     {"honeycomb", "open", 2, 10585379519528241336ULL, 9808874869469701221ULL, 18018062118808294625ULL},
     {"honeycomb", "open", 3, 18059023214442902580ULL, 9808874869469701221ULL, 17585130257612631915ULL},
     {"honeycomb", "open", 4, 7312734739200484171ULL, 9808874869469701221ULL, 12238530042779350871ULL},
-    {"honeycomb", "open", 6, 8382934561351601419ULL, 13374754114434524173ULL, 11384278665230500623ULL},
+    {"honeycomb", "open", 6, 8382934561351601419ULL, 13374754114434524173ULL, 17680946392700458729ULL},
     {"honeycomb", "open", 7, 2667298431016959897ULL, 537466728785440638ULL, 9273591727704858683ULL},
     {"honeycomb", "open", 8, 13515521134832330150ULL, 126387554707291381ULL, 8641323455277156101ULL},
     {"honeycomb", "open", 10, 1917242308757113835ULL, 1264457783743445365ULL, 15999468852864768835ULL},
@@ -131,15 +133,16 @@ constexpr Fixture fixtures[] = {
     {"kagome", "periodic", 10, 3177135575880490573ULL, 9808874869469701221ULL, 9808874869469701221ULL},
 };
 
-bool paths_throw_in_debug(const Fixture& f, char basis) {
+bool paths_throw(const Fixture& f, char basis) {
+    if (basis == 'z' && ((std::string(f.type) == "triangular" && f.size == 2)
+        || (std::string(f.type) == "honeycomb" && f.size < 3)))
+        return true;
 #ifdef NDEBUG
     (void)f;
     (void)basis;
     return false;
 #else
-    return (basis == 'x' && f.size < 6) || std::string(f.type) == "kagome"
-        || (basis == 'z' && std::string(f.type) == "honeycomb"
-            && std::string(f.boundaries) == "open" && f.size < 3);
+    return (basis == 'x' && f.size < 6) || std::string(f.type) == "kagome";
 #endif
 }
 
@@ -165,7 +168,7 @@ BOOST_AUTO_TEST_CASE(geometry_and_paths_match_legacy_mappings) {
             }
             BOOST_CHECK_EQUAL(hash.value, f.geometry);
             for (char basis : {'x', 'z'}) {
-                if (paths_throw_in_debug(f, basis)) {
+                if (paths_throw(f, basis)) {
                     BOOST_CHECK_THROW(make_fredenhagen_marcu_paths(g, f.type, f.size, f.boundaries, basis), std::exception);
                 } else {
                     const auto [half, full] = make_fredenhagen_marcu_paths(g, f.type, f.size, f.boundaries, basis);
@@ -183,7 +186,7 @@ BOOST_AUTO_TEST_CASE(lattice_consumes_mappings_and_initializes_state) {
     for (const auto& f : fixtures) {
         const auto g = make_lattice_geometry(f.type, f.size, f.boundaries);
         for (char basis : {'x', 'z'}) {
-            if (paths_throw_in_debug(f, basis)) continue;
+            if (paths_throw(f, basis)) continue;
             for (int spin : {-1, 1}) {
                 BOOST_TEST_CONTEXT(f.type << " " << f.boundaries << " L=" << f.size << " " << basis << " spin=" << spin) {
                     const double beta = 1.25;
@@ -382,7 +385,7 @@ BOOST_AUTO_TEST_CASE(fredenhagen_marcu_uses_generated_paths) {
         if (f.size != 6) continue;
         const auto geometry = make_lattice_geometry(f.type, f.size, f.boundaries);
         for (char basis : {'x', 'z'}) {
-            if (paths_throw_in_debug(f, basis)) continue;
+            if (paths_throw(f, basis)) continue;
             BOOST_TEST_CONTEXT(f.type << " " << f.boundaries << " " << basis) {
                 Lattice lat(LatSpec{basis, f.type, f.size, 1.25, f.boundaries, 1},
                     std::make_shared<Lattice::RNG>(983));
@@ -405,6 +408,69 @@ BOOST_AUTO_TEST_CASE(fredenhagen_marcu_uses_generated_paths) {
                 }
             }
         }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(wilson_paths_are_simple_closed_cycles) {
+    using Edge = LatticeGeometry::VertexPair;
+    for (const std::string type : {"square", "cubic", "triangular", "honeycomb"}) {
+        for (const std::string boundary : {"open", "periodic"}) {
+            // Cover staggered row parities and rounding of physical bounds;
+            // bound cubic sizes separately because its geometry grows as L^3.
+            for (int L = 3; L <= (type == "cubic" ? 20 : 64); ++L) {
+                if (boundary == "periodic" && (type == "triangular" || type == "honeycomb") && L % 2)
+                    continue;
+                BOOST_TEST_CONTEXT(type << " " << boundary << " L=" << L) {
+                    const auto g = make_lattice_geometry(type, L, boundary);
+                    const auto [half, full] = make_fredenhagen_marcu_paths(g, type, L, boundary, 'z');
+                    BOOST_REQUIRE(!half.empty());
+                    BOOST_REQUIRE_LT(half.size(), full.size());
+                    BOOST_CHECK(std::equal(half.begin(), half.end(), full.begin()));
+                    BOOST_CHECK_EQUAL(full.back().second, full.front().first);
+                    std::set<Edge> physical_edges, visited_edges;
+                    std::set<int> visited_vertices;
+                    for (const auto& e : g.edges)
+                        physical_edges.emplace(std::min(e.source, e.target), std::max(e.source, e.target));
+                    for (std::size_t i = 0; i < full.size(); ++i) {
+                        const auto [u, v] = full[i];
+                        const Edge edge{std::min(u, v), std::max(u, v)};
+                        BOOST_CHECK(physical_edges.contains(edge));
+                        BOOST_CHECK(visited_edges.insert(edge).second);
+                        BOOST_CHECK(visited_vertices.insert(u).second);
+                        BOOST_CHECK_EQUAL(v, full[(i + 1) % full.size()].first);
+                    }
+                    if (type == "honeycomb") BOOST_CHECK_EQUAL(2 * half.size(), full.size());
+                }
+            }
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(wilson_duplicate_check_rejects_reversed_edges_in_both_paths) {
+    for (const std::string boundary : {"open", "periodic"}) {
+        for (bool in_half : {true, false}) {
+            auto geometry = make_lattice_geometry("square", 4, boundary);
+            // Collapse to a vertical line that backtracks within half, or
+            // a horizontal line that backtracks only when full closes.
+            geometry.max_coordinates[0] = in_half ? 0 : 3;
+            geometry.max_coordinates[1] = in_half ? 3 : 0;
+            const auto message_matches = [in_half](const std::runtime_error& error) {
+                const std::string message = error.what();
+                return message.contains("Duplicate edge")
+                    && message.contains(in_half ? "half Wilson path" : "full Wilson path");
+            };
+            BOOST_CHECK_EXCEPTION(
+                make_fredenhagen_marcu_paths(geometry, "square", 4, boundary, 'z'),
+                std::runtime_error, message_matches);
+        }
+        const auto triangular = make_lattice_geometry("triangular", 2, boundary);
+        BOOST_CHECK_THROW(
+            make_fredenhagen_marcu_paths(triangular, "triangular", 2, boundary, 'z'),
+            std::runtime_error);
+        const auto honeycomb = make_lattice_geometry("honeycomb", 2, boundary);
+        BOOST_CHECK_THROW(
+            make_fredenhagen_marcu_paths(honeycomb, "honeycomb", 2, boundary, 'z'),
+            std::runtime_error);
     }
 }
 
