@@ -1,3 +1,87 @@
+# ParaToric v1.0.7 Release Notes
+
+Release date: 2026-10-21
+
+v1.0.7 is a maintenance release over v1.0.6 focused on correct Wilson and
+'t Hooft loops, complete Kagome plaquette construction, and reusable lattice
+geometry and imaginary-time history helpers.
+
+## Highlights
+
+- Fixed square-lattice 't Hooft loops and honeycomb Wilson loops used by the
+  Fredenhagen-Marcu observable.
+- Added duplicate-edge checks for both half and full paths in all builds.
+- Added the missing hexagonal plaquettes to Kagome lattices alongside their
+  triangular plaquettes.
+- Separated lattice geometry and worldline operations from graph and spin state.
+- Updated the bundled pybind11 dependency to 3.1.0 and strengthened Python CLI
+  and job-handler type annotations.
+
+## Loop Fixes And Validation
+
+- Removed the repeated closing edge from square-lattice 't Hooft paths. Its
+  spin previously entered the full-loop product twice and cancelled, leaving
+  an open dual string instead of the intended closed loop.
+- Mirrored the zigzag step counts of honeycomb Wilson halves so rounding of
+  the physical bounds cannot leave the full path open. This applies to both
+  open and periodic boundaries.
+- Reject repeated undirected edges independently in half and full Wilson and
+  't Hooft paths, including reversed endpoint pairs. Errors identify the path,
+  edge, lattice type, size, and boundaries; sharing edges between the half
+  path and its enclosing full path remains valid.
+- Enforce honeycomb 't Hooft plaquette-adjacency checks in Release builds.
+- Require honeycomb Wilson system sizes of at least L=3 in all builds, and
+  reject degenerate triangular L=2 Wilson paths through duplicate-edge checks.
+
+## Geometry And Internals
+
+- Extracted ordered vertex, edge, plaquette, cube, coordinate, and incidence
+  mappings into graph-independent unit-cell geometry helpers, with
+  Fredenhagen-Marcu paths constructed separately.
+- Preserved historical construction order and numbering, including small
+  periodic systems with parallel edges and staggered open boundary cuts.
+- Appended Kagome hexagons after the existing triangles, preserving triangle
+  indices. Both plaquette shapes use the existing coupling J and participate
+  in QMC updates and plaquette estimators.
+- Generalized history searches, insertion, erasure, event movement, time-origin
+  rotation, and spin integrals in `time_search.hpp`. Borrowed `WorldlineView`
+  objects and adapters allow reuse independently of edge-based lattice state.
+- Added shared spin-product integration with coincident-event parity handling.
+
+## Documentation And Tests
+
+- Added geometry regression tests for ordered mappings, boundary clipping,
+  Kagome tiling and hexagon participation in QMC.
+- Added history-helper tests covering event mutations, rotation, spin lookup,
+  and spin-product integrals.
+- Added Wilson path checks across 346 valid geometry cases, covering sizes
+  L=3 through L=64 (through L=20 for cubic lattices), both boundary conditions,
+  closure, continuity, edge existence, and uniqueness.
+- Added duplicate-rejection tests for half and full Wilson paths, including
+  reversed edges, and verified geometry, lattice, and QMC tests in Debug and
+  Release builds.
+- Added an `AGENTS.md` development guide covering source layout, build options,
+  interface contracts, and simulation invariants.
+
+## Compatibility Notes
+
+- Public C++, C, and Python simulation interfaces, CLI options, and result
+  schemas are unchanged.
+- Fredenhagen-Marcu results for the affected square 't Hooft and honeycomb
+  Wilson paths can differ from earlier releases because their operators are
+  now constructed correctly.
+- Kagome simulations now include hexagonal plaquette terms with coupling J;
+  results from the earlier triangle-only construction describe a different
+  Hamiltonian. Kagome Fredenhagen-Marcu paths remain unimplemented.
+- Duplicate loop paths and undersized honeycomb Wilson paths now fail during
+  lattice construction in all builds, including when Fredenhagen-Marcu is not
+  among the requested observables.
+
+## Reference
+
+- Compared with `v1.0.6`: 6 development commits before this release metadata update.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.6...v1.0.7
+
 # ParaToric v1.0.6 Release Notes
 
 Release date: 2026-09-06
