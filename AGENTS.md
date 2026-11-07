@@ -30,7 +30,6 @@ authority for current build and API behavior; update this guide when those chang
 | `python/bindings/`, `python/paratoric/` | pybind11 extension, package imports, `_paratoric.pyi` signatures and array contracts. |
 | `python/cli/paratoric.py`, `job_handler.py` | Sweep arguments, multiprocessing, native subprocesses, HDF5 aggregation, plots. |
 | `tests/` | Boost.Test executables registered with CTest. |
-| `benchmarks/tuple_parity.cpp` | Seeded parity-only and mixed-update profiling; standalone CMake project under `benchmarks/`. |
 | `CMakeLists.txt`, `cmake/`, `python/pyproject.toml` | Targets/options, exported CMake package, Python metadata. |
 | `external/pybind11/`, `scripts/job_script_creator.ipynb` | Optional binding submodule; SLURM job generation notebook. |
 
@@ -83,9 +82,6 @@ For development use a separate Debug build, e.g. `-B build/debug
 -DCMAKE_BUILD_TYPE=Debug`. CTest names are `test_lattice`,
 `test_lattice_geometry`, `test_time_search`, `test_extended_toric_code_qmc`, `test_input_validation`, and `test_tuple_parity`; select a relevant
 test with `ctest --test-dir build/debug -R test_input_validation --output-on-failure`.
-
-For tuple-parity profiling, use the standalone benchmark and measurement notes
-in `benchmarks/README.md`; it supports direct parity proposals and mixed updates.
 
 ## C++ and C integration
 
