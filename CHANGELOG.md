@@ -1,3 +1,96 @@
+# ParaToric v1.0.8 Release Notes
+
+Release date: 2026-11-08
+
+v1.0.8 is a maintenance release over v1.0.7 focused on reaching all allowed
+tuple-parity sectors at zero off-diagonal single-spin field, efficient parity
+proposals, and preventing overflow in potential-energy cache-reset arithmetic.
+
+## Highlights
+
+- Added tuple-parity moves at `lmbda=0` in the x basis and `h=0` in the z basis,
+  restoring finite-temperature expansion sectors that pair-only moves miss.
+- Added a cached GF(2) incidence-kernel basis, preferring local cube surfaces
+  for cubic x-basis updates while retaining the remaining kernel directions.
+- Reduced parity-update overhead through cached incidence, reused proposal
+  buffers, and a direct path for edges with two proposed toggles.
+- Fixed cache-reset interval and proposal-counter overflow using `long long`
+  in thermalization, sampling, and hysteresis.
+
+## Zero-Field Sampling Fix
+
+- Pair insertion/deletion preserves each tuple's event-count parity. Starting
+  from empty histories previously restricted all counts to be even, although
+  valid odd-count combinations exist when their tuple operators multiply to
+  the identity, such as all plaquettes on a square torus or a cube boundary.
+- The zero-single-field combination-update slot now inserts or deletes one
+  event per tuple in a selected identity relation. The complete move flips
+  every edge an even number of times, preserving imaginary-time trace closure
+  while connecting the allowed tuple-parity sectors.
+- Choose births with probability `beta*c/(beta*c+k)` and otherwise delete an
+  existing event uniformly, with `c=J` in x and `c=mu` in z. Include both the
+  reverse-proposal factors and diagonal-action change in the Metropolis ratio.
+- Accumulate proposal weights logarithmically, retaining tiny-coupling limits
+  when the product `beta*c` underflows.
+- Change event histories and affected active energy caches only on acceptance.
+  Time-origin spins and commuting diagonal stabilizer caches remain unchanged.
+
+## Overflow Fix
+
+- Widen both the proposal counters and reset intervals to `long long` in all
+  three simulation workflows.
+- Use `10000LL` and `100000LL` multipliers so multiplication is performed in
+  the wider type before assignment, rather than casting an overflowing `int`.
+- Correct cases such as periodic cubic L=20: its 24,000 edges require a
+  2,400,000,000-proposal sampling reset interval, exceeding signed 32-bit range.
+  Public simulation-count and geometry-index types are unchanged.
+
+## Performance And Internals
+
+- Cache kernel relations and their affected-edge incidence, and reuse birth/
+  death flags, event times, and per-edge action-difference buffers.
+- Prefer independent six-plaquette cube surfaces in cubic x and supplement
+  them with remaining kernel directions, including wrapping surfaces.
+- Compute diagonal-action differences on the original histories, avoiding
+  temporary event insertion and rollback for rejected proposals.
+- At zero diagonal edge field, decide acceptance from count factors alone and
+  generate event locations only for accepted proposals.
+- Order two proposed edge times directly with `std::minmax`, retaining the
+  generic gather/sort path for relations with more toggles.
+- Store two tuple positions inline in cached edge records instead of eight;
+  larger incidence lists still grow dynamically.
+
+## Documentation And Tests
+
+- Added the `test_tuple_parity` CTest target, bringing the suite to six targets.
+- Added kernel topology, independence, and incidence checks across all five
+  geometries and both boundary conditions, including cube and wrapping relations.
+- Added birth/death detailed-balance checks and exact commuting square-torus
+  and single-cube trace regressions, plus x/z-basis agreement checks.
+- Added 10,100 differential proposal checks against a frozen implementation,
+  verifying bitwise ratios/actions, RNG state, histories, and caches, including
+  coincident events and edges with four toggles.
+- Added active-cache and workflow checks for sampling, thermalization, and
+  hysteresis, and documented the parity-update invariants in `AGENTS.md`.
+- Verified parity tests in optimized, strict floating-point, Debug, sanitizer,
+  and explicit fast-math builds. Kagome transition checks run in optimized
+  builds because Debug retains its existing unimplemented-FM-path restriction.
+
+## Compatibility Notes
+
+- Public C++, C, and Python simulation interfaces, CLI options, and result
+  schemas are unchanged.
+- Results at zero off-diagonal single-spin field can differ from v1.0.7 because
+  previously unreachable expansion sectors are now sampled. Earlier affected
+  finite-temperature runs should be repeated with the corrected update.
+- Seeded trajectories in affected zero-field regimes can change because the
+  combination slot now performs parity proposals.
+
+## Reference
+
+- Compared with `v1.0.7`: 3 development commits before this release metadata update.
+- Source comparison: https://github.com/palmbart/ParaToric/compare/v1.0.7...v1.0.8
+
 # ParaToric v1.0.7 Release Notes
 
 Release date: 2026-10-21
