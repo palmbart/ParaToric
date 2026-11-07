@@ -3,6 +3,7 @@
 
 #include "lattice/lattice.hpp"
 #include "lattice/lattice_geometry.hpp"
+#include "lattice/tuple_parity.hpp"
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graphml.hpp>
@@ -18,6 +19,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <queue>
 #include <random>
@@ -286,6 +288,67 @@ void Lattice::delete_double_tuple_flip(
     }
     auto& tuple_flips = BASIS == 'x' ? plaquette_flip_vector[tuple_index] : g[tuple_index].star_flips;
     detail::erase_time_pair(tuple_flips, imag_time_tuple_flip, imag_time_next_tuple_flip);
+}
+
+const std::vector<std::vector<int>>& Lattice::get_tuple_parity_relations() {
+    if (!tuple_parity_relations_ready_) {
+        // Resolve actual graph edges, retaining the same identities as histories.
+        std::map<Edge, int> edge_indices;
+        for (std::size_t i = 0; i < egde_cache_.size(); ++i) {
+            edge_indices.emplace(egde_cache_[i], static_cast<int>(i));
+        }
+        const int count = BASIS == 'x' ? get_plaquette_count() : get_vertex_count();
+        std::vector<std::vector<int>> incidence(count);
+        for (int i = 0; i < count; ++i) {
+            const auto edges = BASIS == 'x' ? get_plaquette_edges(i) : get_star_edges(i);
+            for (const auto& edge : edges) incidence[i].push_back(edge_indices.at(edge));
+        }
+        tuple_parity_relations_ = detail::tuple_parity_kernel(incidence, get_edge_count());
+        if (BASIS == 'x' && LATTICE_TYPE == "cubic") {
+            std::vector<std::vector<int>> local;
+            for (const auto& surface : cube_has_plaquettes_lookup) {
+                if (surface.size() != 6) continue;
+                // Open-boundary cube labels can include a historical wrap in x.
+                // Accept only actual closed surfaces in the event incidence.
+                std::vector<int> boundary;
+                for (const int tuple : surface) {
+                    boundary.insert(boundary.end(), incidence[tuple].begin(), incidence[tuple].end());
+                }
+                std::sort(boundary.begin(), boundary.end());
+                bool closed = true;
+                for (std::size_t i = 0; i < boundary.size(); i += 2) {
+                    if (i + 1 == boundary.size() || boundary[i] != boundary[i + 1]) {
+                        closed = false;
+                        break;
+                    }
+                }
+                if (closed) local.push_back(surface);
+            }
+            tuple_parity_relations_ = detail::prefer_local_tuple_relations(tuple_parity_relations_, local, count);
+        }
+        tuple_parity_edges_.resize(tuple_parity_relations_.size());
+        tuple_parity_edges_ready_.resize(tuple_parity_relations_.size(), false);
+        tuple_parity_relations_ready_ = true;
+    }
+    return tuple_parity_relations_;
+}
+
+const std::vector<Lattice::TupleParityEdge>& Lattice::get_tuple_parity_edges(std::size_t relation_index) {
+    const auto& relation = get_tuple_parity_relations()[relation_index];
+    auto& result = tuple_parity_edges_[relation_index];
+    if (!tuple_parity_edges_ready_[relation_index]) {
+        std::map<Edge, std::size_t> positions;
+        for (std::size_t i = 0; i < relation.size(); ++i) {
+            const auto edges = BASIS == 'x' ? get_plaquette_edges(relation[i]) : get_star_edges(relation[i]);
+            for (const auto& edge : edges) {
+                auto [where, inserted] = positions.try_emplace(edge, result.size());
+                if (inserted) result.push_back({edge, {}});
+                result[where->second].tuple_positions.push_back(static_cast<int>(i));
+            }
+        }
+        tuple_parity_edges_ready_[relation_index] = true;
+    }
+    return result;
 }
 
 void Lattice::delete_tuple_flip(int tuple_index, std::span<const Edge> tuple_edges, double imag_time_tuple_flip) {

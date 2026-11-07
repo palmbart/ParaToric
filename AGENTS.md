@@ -24,11 +24,13 @@ authority for current build and API behavior; update this guide when those chang
 | `src/lattice/lattice_geometry.{hpp,cpp}` | Graph-independent unit-cell generation: ordered vertex/edge/plaquette/cube mappings, coordinates, incidence, and Fredenhagen-Marcu paths. |
 | `src/lattice/lattice.{hpp,cpp}` | Graph and spin-state construction from geometry mappings, event histories, energy caches, percolation/loops, GraphML snapshots. |
 | `src/lattice/time_search.hpp` | Geometry-independent history searches/mutations, time-origin rotation, borrowed `WorldlineView`, spin and spin-product integrals. |
+| `src/lattice/tuple_parity.hpp` | Sparse GF(2) relations and one-event parity proposal weights. |
 | `src/rng/`, `src/statistics/` | RNG, bootstrap estimators, autocorrelation. |
 | `src/cli/paratoric.cpp`, `src/io/` | Boost.Program_options native CLI and HDF5 serialization. |
 | `python/bindings/`, `python/paratoric/` | pybind11 extension, package imports, `_paratoric.pyi` signatures and array contracts. |
 | `python/cli/paratoric.py`, `job_handler.py` | Sweep arguments, multiprocessing, native subprocesses, HDF5 aggregation, plots. |
 | `tests/` | Boost.Test executables registered with CTest. |
+| `benchmarks/tuple_parity.cpp` | Seeded parity-only and mixed-update profiling; standalone CMake project under `benchmarks/`. |
 | `CMakeLists.txt`, `cmake/`, `python/pyproject.toml` | Targets/options, exported CMake package, Python metadata. |
 | `external/pybind11/`, `scripts/job_script_creator.ipynb` | Optional binding submodule; SLURM job generation notebook. |
 
@@ -79,8 +81,11 @@ compiler with `CC`/`CXX` or `CMAKE_CXX_COMPILER` in a fresh build directory.
 
 For development use a separate Debug build, e.g. `-B build/debug
 -DCMAKE_BUILD_TYPE=Debug`. CTest names are `test_lattice`,
-`test_lattice_geometry`, `test_time_search`, `test_extended_toric_code_qmc`, and `test_input_validation`; select a relevant
+`test_lattice_geometry`, `test_time_search`, `test_extended_toric_code_qmc`, `test_input_validation`, and `test_tuple_parity`; select a relevant
 test with `ctest --test-dir build/debug -R test_input_validation --output-on-failure`.
+
+For tuple-parity profiling, use the standalone benchmark and measurement notes
+in `benchmarks/README.md`; it supports direct parity proposals and mixed updates.
 
 ## C++ and C integration
 
@@ -204,6 +209,14 @@ not include. See README for full sweep commands.
 - For backend changes preserve x/z duality, sorted imaginary-time histories,
   and consistency of accepted moves with energy caches. Rebuild bare caches
   when changing couplings; zero-coupling caches may be stale.
+- At zero off-diagonal single-spin field, tuple counts can have odd parities
+  whenever their product is the identity. The combination-update slot samples
+  a cached GF(2) kernel basis, preferring elementary cube surfaces in cubic x.
+  It inserts/deletes one event per selected tuple with birth probability
+  `beta*c/(beta*c+k)` and Hastings factor `(beta*c+k)/(beta*c+k_new)` per tuple.
+  Edge incidence and scratch buffers are reused. Rejected proposals leave
+  histories untouched; only accepted moves update the affected active caches.
+  `test_tuple_parity` checks topology, exact commuting traces, and basis agreement.
 - Reuse `detail::WorldlineView` and the helpers in `time_search.hpp` for site or
   bond spins. Views borrow histories and must be reacquired after mutation.
   Integrals take ordered, non-wrapping intervals and return bare spin factors;

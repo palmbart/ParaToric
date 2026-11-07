@@ -78,6 +78,7 @@ set(HDR_PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/lattice/lattice.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/lattice/lattice_geometry.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/lattice/time_search.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/lattice/tuple_parity.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/mcmc/input_validation.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/mcmc/extended_toric_code_qmc.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/rng/rng.hpp

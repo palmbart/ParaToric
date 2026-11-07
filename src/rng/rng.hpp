@@ -75,4 +75,28 @@ inline std::uint64_t uniform_index(RNG& rng, std::uint64_t bound) {
 #endif
 }
 
+/**
+ * @brief Draw a Poisson count conditioned on its parity; mean must be positive.
+ *
+ * At small mean, odd counts use the size-biased proposal 1 + Poisson(mean),
+ * accepting odd k with probability 1/k. Its accepted mass is proportional to
+ * mean^k/k!, without a rejection cost proportional to 1/mean. For zero mean
+ * (e.g. product underflow), return the limiting conditional count.
+ */
+inline std::uint64_t poisson_with_parity(RNG& rng, double mean, bool odd) {
+    if (mean == 0.) return odd ? 1 : 0;
+    std::poisson_distribution<std::uint64_t> poisson(mean);
+    std::uniform_real_distribution<double> uniform(0., 1.);
+    if (odd && mean < 1.) {
+        while (true) {
+            const auto k = 1 + poisson(rng);
+            if (k % 2 == 1 && uniform(rng) < 1. / static_cast<double>(k)) return k;
+        }
+    }
+    while (true) {
+        const auto k = poisson(rng);
+        if ((k % 2 == 1) == odd) return k;
+    }
+}
+
 } // namespace paratoric::rng

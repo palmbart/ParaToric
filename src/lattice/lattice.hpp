@@ -229,6 +229,24 @@ public:
     std::span<const double> get_tuple_spin_flips(int t_index);
 
     /**
+     * @brief Borrow a lazily built basis of identity products of update tuples.
+     * Each relation lists plaquette indices in x or star centers in z, and flips
+     * every edge an even number of times. The basis spans all allowed tuple
+     * parities when the off-diagonal single-spin field is zero.
+     */
+    const std::vector<std::vector<int>>& get_tuple_parity_relations();
+
+    struct TupleParityEdge {
+        Edge edge;
+        // Positions in the selected relation, rather than global tuple indices.
+        // Ordinary surfaces need two; other identity relations may spill.
+        boost::container::small_vector<int, 2> tuple_positions;
+    };
+
+    /** @brief Borrow the cached affected edges and relation positions on each edge. */
+    const std::vector<TupleParityEdge>& get_tuple_parity_edges(std::size_t relation_index);
+
+    /**
      * @brief Overwrite one time in the edge's full history.
      * @pre The index is valid and the replacement preserves sorted order.
      * @note Updates only this history; the caller must synchronize related histories.
@@ -846,6 +864,11 @@ private:
     std::vector<std::vector<int>> star_plaquettes_cache_;
     // Edge descriptors in graph iteration order.
     std::vector<Edge> egde_cache_;
+
+    bool tuple_parity_relations_ready_ = false;
+    std::vector<std::vector<int>> tuple_parity_relations_;
+    std::vector<std::vector<TupleParityEdge>> tuple_parity_edges_;
+    std::vector<bool> tuple_parity_edges_ready_;
 
     /**
      * @brief Own the temporary snapshot file; destruction removes it.

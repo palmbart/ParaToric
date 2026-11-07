@@ -4,6 +4,7 @@
 #pragma once
 
 #include "lattice/lattice.hpp"
+#include "lattice/tuple_parity.hpp"
 #include "mcmc/input_validation.hpp"
 #include "paratoric/types/types.hpp"
 #include "rng/rng.hpp"
@@ -250,6 +251,8 @@ class ExtendedToricCodeQMC {
         std::vector<std::string> get_obs_type_vec(const std::vector<std::string>& observables);
     
     private:
+        // Direct transition access for differential tests and profiling.
+        friend struct TupleParityTestAccess;
         // Measurements receive (lattice, h, lmbda, mu, J). Complex results pack
         // paired real estimators for the statistics routines below.
         std::function<double(Lattice&, double, double, double, double)> 
@@ -526,6 +529,10 @@ class ExtendedToricCodeQMC {
         // Shared with the lattice and bootstrap so a configured seed covers the whole run.
         std::shared_ptr<RNG> rng;
         std::uniform_real_distribution<double> uniform_dist{0., 1.};
+        // Reused by parity proposals; geometry and tuple histories remain lattice-owned.
+        std::vector<unsigned char> parity_create_;
+        std::vector<double> parity_times_;
+        std::vector<double> parity_edge_diffs_;
         static constexpr double PRECISION = std::numeric_limits<double>::epsilon();
         static constexpr double AUTOCORRELATION_WARNING_SAMPLE_FRACTION = 0.1;
 
@@ -771,7 +778,23 @@ class ExtendedToricCodeQMC {
         );
 
         /**
+         * @brief Toggle a kernel relation of tuple-count parities at zero single field.
+         * Insert or delete one event per selected tuple, with birth probability
+         * beta*c/(beta*c+k). The Metropolis ratio includes the reverse proposal
+         * probabilities and the change in diagonal edge action. Histories are
+         * changed only on acceptance; scratch storage and edge incidence are reused.
+         * Tuple flips commute with the diagonal stabilizers, so their caches and
+         * the time-origin spins are unchanged.
+         */
+        void metropolis_step_tuple_parity(
+            Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta,
+            double h, double mu, double J, double lmbda
+        );
+
+        /**
          * @brief Choose one of the seven proposal types with equal probability.
+         * At zero off-diagonal single-spin field, the combination slot instead
+         * proposes a relation among tuples to connect their allowed parities.
          *
          * @param lat Lattice whose histories and active caches are changed on acceptance.
          * @param integrated_pot_energy Running coupled integral; changed only on acceptance.
@@ -2337,6 +2360,104 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_single_tuple_flip_move(
     }
 }
 
+/** @brief Toggle an identity product of tuples, including local cube surfaces. */
+template<char Basis>
+requires ValidBasis<Basis>
+void ExtendedToricCodeQMC<Basis>::metropolis_step_tuple_parity(
+    Lattice& lat, double& integrated_pot_energy, double& acc_ratio, double beta,
+    double h, double mu, double J, double lmbda
+) {
+    acc_ratio = 0.;
+    const double coupling = Basis == 'x' ? J : mu;
+    if (coupling == 0.) return;
+    const auto& relations = lat.get_tuple_parity_relations();
+    if (relations.empty()) return;
+    const auto relation_index = random_index(static_cast<int>(relations.size()));
+    const auto& relation = relations[relation_index];
+    const auto tuple_edges = [&](int i) {
+        if constexpr (Basis == 'x') return lat.get_plaquette_edges(i);
+        else return lat.get_star_edges(i);
+    };
+
+    const detail::PoissonParityProposal proposal(beta, coupling);
+    parity_create_.resize(relation.size());
+    double log_ratio = 0.;
+    for (std::size_t i = 0; i < relation.size(); ++i) {
+        const auto count = lat.get_tuple_spin_flips(relation[i]).size();
+        const bool create = count == 0 || uniform_dist(*rng) < proposal.birth_probability(count);
+        parity_create_[i] = create;
+        log_ratio += proposal.log_ratio(count, create);
+    }
+
+    // Without a diagonal edge field, acceptance needs no times, edge traversal,
+    // cache reads or mutations. Generate event locations only if accepted.
+    const double diagonal_field = Basis == 'x' ? h : lmbda;
+    if (diagonal_field == 0.) {
+        acc_ratio = std::exp(log_ratio);
+        if (!accept(acc_ratio)) return;
+        for (std::size_t i = 0; i < relation.size(); ++i) {
+            const int tuple = relation[i];
+            const auto edges = tuple_edges(tuple);
+            if (parity_create_[i]) lat.insert_tuple_flip(tuple, edges, uniform_real(0., beta));
+            else {
+                const auto times = lat.get_tuple_spin_flips(tuple);
+                const double time = times[random_index(static_cast<int>(times.size()))];
+                lat.delete_tuple_flip(tuple, edges, time);
+            }
+        }
+        return;
+    }
+
+    parity_times_.resize(relation.size());
+    for (std::size_t i = 0; i < relation.size(); ++i) {
+        if (parity_create_[i]) parity_times_[i] = uniform_real(0., beta);
+        else {
+            const auto times = lat.get_tuple_spin_flips(relation[i]);
+            parity_times_[i] = times[random_index(static_cast<int>(times.size()))];
+        }
+    }
+
+    const auto& edges = lat.get_tuple_parity_edges(relation_index);
+    parity_edge_diffs_.resize(edges.size());
+    double action_diff = 0.;
+    SmallEnergyVector times;
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        const auto& affected = edges[i];
+        double diff = 0.;
+        // Every edge occurs an even number of times in a kernel relation. The
+        // proposed toggles reverse its old spin only between successive pairs.
+        if (affected.tuple_positions.size() == 2) {
+            // Local surfaces and two-dimensional global relations have just
+            // two toggles per edge: avoid building and sorting a tiny vector.
+            const auto [left, right] = std::minmax(parity_times_[affected.tuple_positions[0]],
+                                                 parity_times_[affected.tuple_positions[1]]);
+            if (left != right) diff -= 2. * lat.integrated_edge_energy(affected.edge, left, right);
+        } else {
+            times.clear();
+            for (const int position : affected.tuple_positions) times.push_back(parity_times_[position]);
+            std::sort(times.begin(), times.end());
+            for (std::size_t j = 0; j < times.size(); j += 2) {
+                if (times[j] != times[j + 1]) {
+                    diff -= 2. * lat.integrated_edge_energy(affected.edge, times[j], times[j + 1]);
+                }
+            }
+        }
+        parity_edge_diffs_[i] = diff;
+        action_diff -= diagonal_field * diff;
+    }
+    acc_ratio = std::exp(log_ratio - action_diff);
+    if (!accept(acc_ratio)) return;
+    for (std::size_t i = 0; i < relation.size(); ++i) {
+        const auto affected = tuple_edges(relation[i]);
+        if (parity_create_[i]) lat.insert_tuple_flip(relation[i], affected, parity_times_[i]);
+        else lat.delete_tuple_flip(relation[i], affected, parity_times_[i]);
+    }
+    integrated_pot_energy += action_diff;
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        lat.add_potential_edge_energy(edges[i].edge, parity_edge_diffs_[i]);
+    }
+}
+
 /** @brief Propose creating/removing a tuple event and one single event per edge. */
 template<char Basis>
 requires ValidBasis<Basis>
@@ -2349,6 +2470,11 @@ void ExtendedToricCodeQMC<Basis>::metropolis_step_spin_tuple_combination(
     BOOST_LOG_TRIVIAL(debug) << "";
     BOOST_LOG_TRIVIAL(debug) << "# Welcome to MC update metropolis_step_spin_tuple_combination!";
 #endif
+
+    if ((Basis == 'x' && lmbda == 0.) || (Basis == 'z' && h == 0.)) {
+        metropolis_step_tuple_parity(lat, integrated_pot_energy, acc_ratio, beta, h, mu, J, lmbda);
+        return;
+    }
 
     if (Basis == 'x' && (J == 0 || lmbda == 0)) {
         acc_ratio = 0.; 
