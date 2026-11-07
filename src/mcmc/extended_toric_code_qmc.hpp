@@ -2936,8 +2936,8 @@ Result ExtendedToricCodeQMC<Basis>::get_thermalization(
     );
     double acc_ratio = 1.;
 
-    int metropolis_step_count = 0;
-    int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*10000);
+    long long metropolis_step_count = 0;
+    const long long reset_potential_energy_count = lat.get_edge_count() * 10000LL;
 
     for (int i = 0; i < config.sim_spec.N_thermalization; ++i) {
         ++metropolis_step_count;
@@ -3114,8 +3114,8 @@ Result ExtendedToricCodeQMC<Basis>::get_sample(
         throw std::runtime_error(std::format("Integrated potential energy mismatch. {} does not match {}.", integrated_pot_energy, integrated_pot_energy_check));
     }
 
-    int metropolis_step_count = 0;
-    int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*100000);
+    long long metropolis_step_count = 0;
+    const long long reset_potential_energy_count = lat.get_edge_count() * 100000LL;
 
     for (int i = 0; i < config.sim_spec.N_samples; ++i) {
         for (int j = 0; j < config.sim_spec.N_between_samples; ++j) {
@@ -3368,8 +3368,8 @@ Result ExtendedToricCodeQMC<Basis>::get_hysteresis(
         throw std::runtime_error(std::format("Integrated potential energy mismatch. {} does not match {}.", integrated_pot_energy, integrated_pot_energy_check));
     }
 
-    int metropolis_step_count = 0;
-    int reset_potential_energy_count = static_cast<int>(lat.get_edge_count()*100000);
+    long long metropolis_step_count = 0;
+    const long long reset_potential_energy_count = lat.get_edge_count() * 100000LL;
 
     for (size_t n = 0; n < config.param_spec.h_hys.size(); n++) {
         // Series: [observable][sample], in the requested observable order.
